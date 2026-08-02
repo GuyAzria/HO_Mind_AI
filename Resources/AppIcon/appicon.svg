@@ -1,0 +1,120 @@
+<!-- // [MODIFIED v2.0.0 | 2026-04-07] Purpose: Completely redesigned the app icon into a modern, highly detailed SVG. Added a rich tech-blue gradient background, a photorealistic camera lens with curved light reflections, a sleek 3D-shadowed house silhouette, and a glowing cyan laser line to beautifully represent the barcode scanning and AI features. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Background Gradient: Deep Tech Blue to Vibrant Cyan -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A192F" />
+      <stop offset="50%" stop-color="#0277bd" />
+      <stop offset="100%" stop-color="#00bcd4" />
+    </linearGradient>
+
+    <!-- House Body Gradient: Crisp White to Light Silver for depth -->
+    <linearGradient id="houseGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e0e0e0" />
+    </linearGradient>
+
+    <!-- Lens Outer Metallic Ring Gradient -->
+    <linearGradient id="lensRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5f5f5" />
+      <stop offset="50%" stop-color="#bdbdbd" />
+      <stop offset="100%" stop-color="#757575" />
+    </linearGradient>
+
+    <!-- Lens Inner Glass Depth -->
+    <radialGradient id="lensGlass" cx="50%" cy="50%" r="50%">
+      <stop offset="50%" stop-color="#11111a" />
+      <stop offset="90%" stop-color="#1a1a2e" />
+      <stop offset="100%" stop-color="#000000" />
+    </radialGradient>
+
+    <!-- Scanner Laser Glow Filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur1" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Premium Drop Shadow for the House -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <!-- 1. Background -->
+  <rect width="512" height="512" fill="url(#bgGrad)" />
+
+  <!-- 2. The House Silhouette (With Drop Shadow) -->
+  <g filter="url(#dropShadow)">
+    <!-- Roof/Frame -->
+    <path d="M 256 60 
+             L 50 240 
+             A 12 12 0 0 0 58 260 
+             H 90 
+             V 430 
+             A 20 20 0 0 0 110 450 
+             H 402 
+             A 20 20 0 0 0 422 430 
+             V 260 
+             H 454 
+             A 12 12 0 0 0 462 240 
+             Z" 
+          fill="url(#houseGrad)" />
+  </g>
+
+  <!-- 3. Integrated Barcode Design (At the top of the house) -->
+  <g fill="#b0bec5" opacity="0.6">
+    <rect x="180" y="130" width="8" height="35" rx="3"/>
+    <rect x="195" y="130" width="16" height="35" rx="3"/>
+    <rect x="218" y="130" width="6" height="35" rx="3"/>
+    <rect x="230" y="130" width="14" height="35" rx="3"/>
+    <rect x="250" y="130" width="22" height="35" rx="3"/>
+    <rect x="278" y="130" width="8" height="35" rx="3"/>
+    <rect x="292" y="130" width="12" height="35" rx="3"/>
+    <rect x="310" y="130" width="20" height="35" rx="3"/>
+  </g>
+
+  <!-- 4. Photorealistic Camera Lens -->
+  <g transform="translate(0, 20)">
+    <!-- Outer Metal Bezel -->
+    <circle cx="256" cy="270" r="115" fill="url(#lensRing)" filter="url(#dropShadow)" />
+    
+    <!-- Inner Black Glass -->
+    <circle cx="256" cy="270" r="100" fill="url(#lensGlass)" />
+    
+    <!-- Aperture Ring Detail -->
+    <circle cx="256" cy="270" r="65" fill="none" stroke="#2c2c44" stroke-width="4" opacity="0.8"/>
+    <circle cx="256" cy="270" r="45" fill="none" stroke="#3d3d5c" stroke-width="2" opacity="0.6"/>
+    
+    <!-- Deep Lens Core -->
+    <circle cx="256" cy="270" r="30" fill="#050508" />
+
+    <!-- Curved Light Reflections (Glass Glare) -->
+    <!-- Top left curve -->
+    <path d="M 176 210 A 90 90 0 0 1 336 210 A 100 100 0 0 0 176 210 Z" fill="#ffffff" opacity="0.15" />
+    <!-- Bottom right curve -->
+    <path d="M 196 330 A 90 90 0 0 0 316 330 A 100 100 0 0 1 196 330 Z" fill="#ffffff" opacity="0.08" />
+    
+    <!-- Direct pinpoint glare -->
+    <circle cx="240" cy="255" r="8" fill="#ffffff" opacity="0.7" filter="url(#glow)"/>
+    <circle cx="265" cy="285" r="4" fill="#ffffff" opacity="0.3" />
+  </g>
+
+  <!-- 5. Neon Scanner Laser Beam -->
+  <g transform="translate(0, 20)">
+    <!-- The glowing line -->
+    <line x1="90" y1="270" x2="422" y2="270" stroke="#00FFCC" stroke-width="6" stroke-linecap="round" filter="url(#glow)" />
+    <line x1="90" y1="270" x2="422" y2="270" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+    
+    <!-- Laser light falloff (Subtle transparency fade below the line) -->
+    <polygon points="90,270 422,270 380,310 130,310" fill="#00FFCC" opacity="0.1" />
+  </g>
+
+  <!-- 6. Smart Recording/Status LED -->
+  <circle cx="135" cy="140" r="8" fill="#00e676" filter="url(#glow)" />
+
+</svg>

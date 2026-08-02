@@ -1,0 +1,186 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:HO_Mind_AI"
+             x:Class="HO_Mind_AI.MainPage"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="Transparent">
+
+    <Grid BackgroundColor="Transparent">
+
+        <Grid x:Name="NormalUiContainer" BackgroundColor="Black" IsVisible="True">
+            <local:BarcodeView x:Name="barcodeView" HorizontalOptions="Fill" VerticalOptions="Fill" CameraMode="Photo" />
+
+            <Grid x:Name="ChatLayer" RowDefinitions="Auto, Auto, *, Auto" BackgroundColor="#ECE5DD" IsVisible="True" ZIndex="50">
+
+                <Border Grid.Row="0" BackgroundColor="#075E54" Padding="15" StrokeThickness="0">
+                    <Grid ColumnDefinitions="*, Auto">
+                        <VerticalStackLayout VerticalOptions="Center" Grid.Column="0">
+                            <Label Text="HO AI ASSISTANT" TextColor="White" FontAttributes="Bold" FontSize="18" />
+                            <Label x:Name="ActiveAgentLabel" Text="Agent: Default" TextColor="#A5D6A7" FontSize="11" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1" Text="📸 Camera" Clicked="SwitchToCamera_Clicked" BackgroundColor="#128C7E" TextColor="White" HeightRequest="40" CornerRadius="20" />
+                    </Grid>
+                </Border>
+
+                <Border x:Name="SelectionBar" Grid.Row="1" BackgroundColor="White" Padding="10,8" StrokeThickness="0" IsVisible="False">
+                    <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="15">
+                        <Label Text="Select messages to copy" TextColor="Black" VerticalOptions="Center" Grid.Column="0" FontAttributes="Italic" />
+                        <Button x:Name="TopCancelButton" Grid.Column="1" Text="✕" Clicked="OnClearSelectionClicked" BackgroundColor="Transparent" TextColor="Black" FontSize="20" FontAttributes="Bold" HeightRequest="40" WidthRequest="40" CornerRadius="20" Padding="0" VerticalOptions="Center" />
+                        <Button x:Name="TopCopyButton" Grid.Column="2" Text="⧉" Clicked="OnCopySelectionClicked" BackgroundColor="Transparent" TextColor="Black" FontSize="22" HeightRequest="40" WidthRequest="40" CornerRadius="20" Padding="0" VerticalOptions="Center" />
+                    </Grid>
+                </Border>
+
+                <ScrollView Grid.Row="2" x:Name="ChatScroll">
+                    <VerticalStackLayout x:Name="ChatContainer" Padding="15" Spacing="10" />
+                </ScrollView>
+
+                <Border Grid.Row="3" BackgroundColor="White" Padding="10" StrokeThickness="0">
+                    <Border.Shadow>
+                        <Shadow Brush="Black" Offset="0,-2" Opacity="0.2" Radius="5" />
+                    </Border.Shadow>
+                    <Grid ColumnDefinitions="*, Auto, Auto" ColumnSpacing="8">
+                        <Entry x:Name="ManualInput" Placeholder="Ask Home Assistant..." TextColor="Black" VerticalOptions="Center" Completed="OnSendTextClicked" />
+                        <Button Grid.Column="1" Text="Send" Clicked="OnSendTextClicked" BackgroundColor="#128C7E" TextColor="White" />
+                        <Button Grid.Column="2" Text="🎤" Clicked="OnVoiceClicked" BackgroundColor="#25D366" TextColor="White" WidthRequest="50" FontAttributes="Bold" FontSize="18" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Grid x:Name="CameraControlsLayer" IsVisible="False" ZIndex="40">
+                <VerticalStackLayout VerticalOptions="Start" HorizontalOptions="Fill" BackgroundColor="#88000000" Padding="10">
+                    <Grid ColumnDefinitions="Auto, *, Auto">
+                        <Button Text="⬅ Chat" Clicked="SwitchToChat_Clicked" TextColor="White" BackgroundColor="Transparent" FontSize="16" Grid.Column="0" />
+                        <Label x:Name="ModeTitleLabel" Text="📸 Mode: Item Image" TextColor="White" FontSize="16" FontAttributes="Bold" HorizontalOptions="Center" Grid.Column="1" />
+                        <Button Text="ⓘ" Clicked="ToggleDebug_Clicked" Grid.Column="2" BackgroundColor="Transparent" TextColor="Yellow" FontSize="20" WidthRequest="40" HeightRequest="40" Padding="0" />
+                    </Grid>
+                    <Label x:Name="DebugLabel" IsVisible="False" Text="Debug: Waiting..." TextColor="Yellow" FontSize="11" HorizontalOptions="Center" Margin="0,0,0,10" />
+                    <HorizontalStackLayout HorizontalOptions="Center" Spacing="8">
+                        <Button Text="Item" Clicked="TestItem_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
+                        <Button Text="Barcode" Clicked="TestBarcode_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
+                        <Button Text="Receipt" Clicked="TestReceipt_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
+                        <Button Text="Stylist" Clicked="TestStylist_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+
+                <Grid x:Name="BarcodeOverlay" IsVisible="False">
+                    <BoxView Color="#88000000" VerticalOptions="Start" HeightRequest="200" />
+                    <BoxView Color="#88000000" VerticalOptions="End" HeightRequest="300" />
+                    <BoxView Color="#88000000" HorizontalOptions="Start" WidthRequest="40" Margin="0,200,0,300" />
+                    <BoxView Color="#88000000" HorizontalOptions="End" WidthRequest="40" Margin="0,200,0,300" />
+                    <Border Stroke="#00FF00" StrokeThickness="3" BackgroundColor="Transparent" Margin="40,200,40,300" StrokeShape="Rectangle 10" />
+                    <Label x:Name="ScannedBarcodeLabel" Text="" TextColor="#00FF00" FontSize="22" FontAttributes="Bold" HorizontalOptions="Center" VerticalOptions="Center" />
+                </Grid>
+
+                <Border x:Name="InstructionFrame" IsVisible="False" BackgroundColor="#B3000000" StrokeThickness="0" Stroke="Transparent" Margin="20,150,20,0" Padding="15,10" VerticalOptions="Start" HorizontalOptions="Center">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="20" />
+                    </Border.StrokeShape>
+                    <Label x:Name="InstructionLabel" TextColor="White" FontSize="16" FontAttributes="Bold" HorizontalTextAlignment="Center" />
+                </Border>
+
+                <HorizontalStackLayout VerticalOptions="Start" HorizontalOptions="Center" Margin="0,110,0,0" Spacing="15">
+                    <Button x:Name="AiBgButton" Text="🪄 AI" BackgroundColor="#03a9f4" TextColor="White" CornerRadius="20" HeightRequest="40" Clicked="AiBgButton_Clicked" />
+                    <Button x:Name="FlashButton" Text="⚡" BackgroundColor="#88000000" TextColor="White" CornerRadius="20" WidthRequest="40" HeightRequest="40" Clicked="FlashButton_Clicked" />
+                    <Button Text="📷+" Clicked="CycleCamera_Clicked" BackgroundColor="#88000000" TextColor="White" CornerRadius="20" WidthRequest="40" HeightRequest="40" />
+                    <Button Text="🔄" BackgroundColor="#88000000" TextColor="White" CornerRadius="20" WidthRequest="40" HeightRequest="40" Clicked="SwitchCam_Clicked" />
+                    <Button Text="⚙️" BackgroundColor="#88000000" TextColor="White" CornerRadius="20" WidthRequest="40" HeightRequest="40" Clicked="OpenSettings_Clicked" />
+                </HorizontalStackLayout>
+
+                <Button x:Name="CaptureButton" Text="📸 Capture" FontAttributes="Bold" FontSize="20" TextColor="White" BackgroundColor="#03a9f4" CornerRadius="35" WidthRequest="200" HeightRequest="70" VerticalOptions="End" Margin="0,0,0,40" Clicked="CaptureButton_Clicked" />
+            </Grid>
+
+            <Grid x:Name="LoadingOverlay" IsVisible="False" BackgroundColor="#99000000" ZIndex="200">
+                <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="10">
+                    <ActivityIndicator IsRunning="True" Color="#03a9f4" WidthRequest="50" HeightRequest="50" />
+                    <Label x:Name="LoadingLabel" Text="Processing..." TextColor="White" FontSize="16" FontAttributes="Bold" />
+                </VerticalStackLayout>
+            </Grid>
+
+            <Grid x:Name="PreviewOverlay" IsVisible="False" BackgroundColor="Black" ZIndex="100">
+                <Image x:Name="PreviewImage" Aspect="AspectFit" HorizontalOptions="Fill" VerticalOptions="Fill" />
+                <HorizontalStackLayout HorizontalOptions="Center" VerticalOptions="End" Margin="0,0,0,40" Spacing="20">
+                    <Button Text="❌ Retake" BackgroundColor="#F44336" TextColor="White" FontSize="18" FontAttributes="Bold" CornerRadius="25" WidthRequest="150" HeightRequest="60" Clicked="Retake_Clicked" />
+                    <Button Text="✅ Send" BackgroundColor="#4CAF50" TextColor="White" FontSize="18" FontAttributes="Bold" CornerRadius="25" WidthRequest="150" HeightRequest="60" Clicked="Send_Clicked" />
+                </HorizontalStackLayout>
+            </Grid>
+
+            <ContentView x:Name="SettingsModal" IsVisible="False" BackgroundColor="#DD000000" ZIndex="300">
+                <Border BackgroundColor="#222" Stroke="Transparent" StrokeThickness="0" Margin="20" Padding="20" VerticalOptions="Center" HorizontalOptions="Fill">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="15" />
+                    </Border.StrokeShape>
+                    <ScrollView>
+                        <VerticalStackLayout Spacing="15">
+                            <Label Text="HO Settings" TextColor="#03a9f4" FontSize="20" FontAttributes="Bold" HorizontalOptions="Center" />
+
+                            <Entry x:Name="ServerUrlEntry" Placeholder="HA URL" TextColor="White" BackgroundColor="#111" />
+                            <Entry x:Name="TokenEntry" Placeholder="Access Token" TextColor="White" BackgroundColor="#111" IsPassword="True" />
+
+                            <Label Text="Conversation Agent ID:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
+                            <Entry x:Name="AgentIdEntry" Placeholder="e.g., conversation.ho_ai_agent" TextColor="White" BackgroundColor="#111" />
+
+                            <Label Text="HA Notify Device ID:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
+                            <Entry x:Name="NotifyIdEntry" Placeholder="e.g., mobile_app_s20_ultra" TextColor="White" BackgroundColor="#111" />
+
+                            <Label Text="Microphone Source:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
+                            <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
+                                <Switch x:Name="UseBtMicSwitch" />
+                                <Label Text="Use Bluetooth/External Mic" TextColor="White" VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+
+                            <HorizontalStackLayout Spacing="10" VerticalOptions="Center" Margin="0,10,0,0">
+                                <Switch x:Name="UseShakeMicSwitch" />
+                                <Label Text="Enable Shake to Speak" TextColor="White" VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+
+                            <Label Text="Voice Assistant Language:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
+                            <Picker x:Name="LanguagePicker" TextColor="White" BackgroundColor="#111">
+                                <Picker.Items>
+                                    <x:String>English (US)</x:String>
+                                    <x:String>Hebrew (Israel)</x:String>
+                                    <x:String>French (France)</x:String>
+                                    <x:String>Russian (Russia)</x:String>
+                                    <x:String>Arabic (SA)</x:String>
+                                </Picker.Items>
+                            </Picker>
+
+                            <BoxView Color="#444" HeightRequest="1" Margin="0,10,0,5" />
+                            <Label Text="Assistant Volume Override (Works on Silent):" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
+                            <Grid ColumnDefinitions="*, Auto" ColumnSpacing="10" Margin="0,10,0,0">
+                                <Slider x:Name="VolumeSlider" Minimum="0" Maximum="100" Value="100" ValueChanged="VolumeSlider_ValueChanged" MinimumTrackColor="#03a9f4" MaximumTrackColor="#444" ThumbColor="#03a9f4" Grid.Column="0" VerticalOptions="Center" />
+                                <Label x:Name="VolumeLabel" Text="100%" TextColor="White" VerticalOptions="Center" Grid.Column="1" WidthRequest="45" HorizontalTextAlignment="End" />
+                            </Grid>
+
+                            <BoxView Color="#444" HeightRequest="1" Margin="0,5" />
+                            <Label Text="Debugging &amp; Logs" TextColor="#AAA" FontSize="12" HorizontalOptions="Center" />
+
+                            <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
+                                <Switch x:Name="EnableLoggingSwitch" />
+                                <Label Text="Enable File Logging" TextColor="White" VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+
+                            <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
+                                <Button Text="📄 View Logs" BackgroundColor="#FF9800" Clicked="ViewLogs_Clicked" HeightRequest="40" CornerRadius="8" />
+                                <Button Text="🗑️ Clear" BackgroundColor="#607D8B" Clicked="ClearLogs_Clicked" HeightRequest="40" CornerRadius="8" />
+                            </HorizontalStackLayout>
+
+                            <BoxView Color="#444" HeightRequest="1" Margin="0,5" />
+                            <Label Text="Voice Testing Area" TextColor="#AAA" FontSize="12" HorizontalOptions="Center" />
+                            <Entry x:Name="TestInput" Placeholder="Spoken text will appear here..." TextColor="Yellow" BackgroundColor="#111" />
+
+                            <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
+                                <Button Text="Test STT 🎤" BackgroundColor="#E91E63" Clicked="TestSTT_Clicked" WidthRequest="120" />
+                                <Button Text="Test TTS 📢" BackgroundColor="#2196F3" Clicked="TestTTS_Clicked" WidthRequest="120" />
+                            </HorizontalStackLayout>
+
+                            <Button Text="Save and Close" BackgroundColor="#4CAF50" Margin="0,10,0,0" Clicked="SaveSettings_Clicked" />
+                            <Button Text="Close App" BackgroundColor="#F44336" Clicked="Close_Clicked" />
+                        </VerticalStackLayout>
+                    </ScrollView>
+                </Border>
+            </ContentView>
+        </Grid>
+
+    </Grid>
+</ContentPage>

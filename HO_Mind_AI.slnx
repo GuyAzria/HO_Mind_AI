@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="HO_Mind_AI.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+</Solution>
