@@ -1,22 +1,8 @@
 ﻿// FloatingVoiceService.cs — DIAGNOSTIC VERSION v4.35.0
+// [MODIFIED v2026.9.24 | 2026-09-24] Purpose: The voice-language mapping moved
+//   to VoiceLanguage, which MainPage also uses; this file held a second,
+//   identical copy of it. No behaviour change.
 // [MODIFIED v4.35.0 | 2026-07-28] Purpose: Removed the custom start beep (PlayStartBeepAsync) from TriggerListeningSequence to allow the default Android STT beep to play alone.
-// [MODIFIED v4.33.0 | 2026-06-16] Purpose: Fixed the real-time MediaSession text update bug. Android silently ignores MediaMetadata updates if they originate from a background thread (like the STT engine event). Wrapped UpdateMediaSessionText in MainThread.BeginInvokeOnMainThread and added a PlaybackState refresh ping to force the OS to immediately redraw the media player widget with the live transcription.
-// [ADDED v4.32.0 | 2026-06-16] Purpose: Added a missing 'Stop' beep at the end of voice capture sessions. Redesigned the audio cues to mimic a "Star Trek" communicator (Combadge) style: a fast double-chirp for opening the mic, and a single acknowledgment blip for closing, using precise ToneGenerator sequencing.
-// [ADDED v4.31.0 | 2026-06-16] Purpose: Dynamically update MediaSession metadata with real-time Speech-To-Text transcription results.
-// [ADDED v4.30.0 | 2026-06-16] Purpose: Completely destroy and Release() the MediaSession when BT is toggled OFF, rather than just setting it to Stopped. 
-// [ADDED v4.29.0 | 2026-06-15] Purpose: Abstracted MediaSession activation into EnableMediaRouting and DisableMediaRouting to remove the widget from the Android lock screen.
-// [ADDED v4.28.0 | 2026-06-14] Purpose: Battery optimization and dynamic UI control. Active KeepAlive loop and toggle button logic.
-// [MODIFIED v4.27.0 | 2026-06-14] Purpose: Bypassed Android 12+ Background Service Launch restrictions via direct PendingIntent service routing.
-// [ADDED v4.26.0 | 2026-06-14] Purpose: Fake MediaMetadata and 44100Hz Stereo AudioTrack to trick Samsung Bluetooth AVRCP.
-// [ADDED v4.25.0 | 2026-06-14] Purpose: Expanded MediaSession callbacks (Transport controls).
-// [ADDED v4.24.0 | 2026-06-14] Purpose: Direct overrides for Transport Controls (OnPlay, OnPause, OnStop).
-// [ADDED v4.23.0 | 2026-06-14] Purpose: Solved Android 11+ background media routing with Foreground Notification MediaStyle.
-// [ADDED v4.22.0 | 2026-06-14] Purpose: Continuous Zello-style 'KeepAlive' AudioTrack loop.
-// [ADDED v4.21.0 | 2026-06-14] Purpose: Obsolete MediaSessionFlags and global AudioFocus.Gain.
-// [ADDED v4.20.0 | 2026-06-14] Purpose: Transient silence hack.
-// [MODIFIED v4.19.0 | 2026-06-14] Purpose: PlaybackStateCode enum updates.
-// [MODIFIED v4.18.0 | 2026-06-14] Purpose: Fixed Spotify resume bug.
-// [MODIFIED v4.17.0 | 2026-06-14] Purpose: Conditionally hijack AudioFocus based on _musicWasPlayingBeforeListen.
 
 using Android.App;
 using Android.Content;
@@ -986,8 +972,9 @@ namespace HO_Mind_AI.Platforms.Android
             {
                 SpeechToText.Default.RecognitionResultUpdated += onUpdated;
                 SpeechToText.Default.RecognitionResultCompleted += onCompleted;
-                string savedLang = Microsoft.Maui.Storage.Preferences.Get("voice_lang", "English (US)");
-                string langCode = savedLang switch { "Hebrew (Israel)" => "he-IL", "French (France)" => "fr-FR", "Russian (Russia)" => "ru-RU", "Arabic (SA)" => "ar-SA", _ => "en-US" };
+                // [MODIFIED v2026.9.24] The mapping lives in VoiceLanguage now.
+                // This file had its own copy of the same switch expression.
+                string langCode = global::HO_Mind_AI.VoiceLanguage.CultureCode();
 
                 await SpeechToText.Default.StartListenAsync(new SpeechToTextOptions { Culture = new CultureInfo(langCode), AutoStopSilenceTimeout = TimeSpan.FromSeconds(3) }, _sttCts.Token);
                 return await tcs.Task;

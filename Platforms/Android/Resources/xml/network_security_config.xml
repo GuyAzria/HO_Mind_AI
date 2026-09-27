@@ -1,6 +1,21 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-	<!-- Force Android to permit HTTP (Cleartext) traffic to local/VPN IPs -->
+	<!-- // [MODIFIED v2026.9.24 | 2026-09-24] Purpose: Recorded why this file stays
+	     as it is, so that it is not "hardened" into breaking the only route to
+	     Home Assistant. -->
+
+	<!-- Cleartext HTTP is permitted DELIBERATELY. Home Assistant here is reached
+	     over http:// across a VPN into the home network and has no certificate at
+	     all, so requiring https would leave this app with nothing to talk to.
+
+	     It is base-config and not domain-config because the address is typed by
+	     the user at runtime (ha_url) and is unknown when this file is built, and
+	     because Android matches hostnames here, not address ranges.
+
+	     What was removed instead lived in code: a callback that accepted ANY TLS
+	     certificate, on the same client that carries the Home Assistant token. It
+	     gave nothing to an http:// address and silently accepted a forged one on
+	     https. See HaCredentials.cs. -->
 	<base-config cleartextTrafficPermitted="true">
 		<trust-anchors>
 			<certificates src="system" />

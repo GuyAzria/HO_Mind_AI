@@ -1,8 +1,8 @@
-﻿// [MODIFIED v1.42.0 | 2026-04-07] Purpose: Registered the new native BarcodeViewHandler.
+﻿// [MODIFIED v2026.9.24 | 2026-09-24] Purpose: Comment translated to English (RULE 17). No behaviour change.
 // [ADDED v2.9.0 | 2026-04-26] Purpose: Added .UseMauiCommunityToolkit() for Speech-to-Text capabilities.
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.Controls.Hosting;
-using CommunityToolkit.Maui; // חובה עבור זיהוי הקול
+using CommunityToolkit.Maui; // Required for speech recognition.
 
 namespace HO_Mind_AI
 {

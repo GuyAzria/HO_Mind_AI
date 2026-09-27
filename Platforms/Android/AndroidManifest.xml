@@ -1,8 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- // [MODIFIED v2026.9.24 | 2026-09-24] Purpose: allowBackup turned off, so the
+     platform backup set can no longer carry this app data off the device, and the
+     unused CALL_PHONE and READ_CONTACTS permissions removed. Cleartext traffic
+     stays permitted on purpose - see network_security_config.xml. -->
 
 	<application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/appicon"
         android:roundIcon="@mipmap/appicon_round"
         android:supportsRtl="true"
@@ -32,8 +36,6 @@
 	<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 	<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
 	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-	<uses-permission android:name="android.permission.READ_CONTACTS" />
-	<uses-permission android:name="android.permission.CALL_PHONE" />
 
 	<uses-permission android:name="android.permission.READ_PHONE_STATE" />
 

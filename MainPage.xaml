@@ -13,14 +13,34 @@
 
             <Grid x:Name="ChatLayer" RowDefinitions="Auto, Auto, *, Auto" BackgroundColor="#ECE5DD" IsVisible="True" ZIndex="50">
 
-                <Border Grid.Row="0" BackgroundColor="#075E54" Padding="15" StrokeThickness="0">
-                    <Grid ColumnDefinitions="*, Auto">
-                        <VerticalStackLayout VerticalOptions="Center" Grid.Column="0">
-                            <Label Text="HO AI ASSISTANT" TextColor="White" FontAttributes="Bold" FontSize="18" />
-                            <Label x:Name="ActiveAgentLabel" Text="Agent: Default" TextColor="#A5D6A7" FontSize="11" />
-                        </VerticalStackLayout>
-                        <Button Grid.Column="1" Text="📸 Camera" Clicked="SwitchToCamera_Clicked" BackgroundColor="#128C7E" TextColor="White" HeightRequest="40" CornerRadius="20" />
-                    </Grid>
+                <!-- [MODIFIED v2026.9.24 | 2026-09-24] The header carries the whole of the
+                     app now: who you are talking to, the two things this app does, and the
+                     settings behind three dots. Settings used to live inside the camera
+                     controls, so changing an agent meant turning the camera on first.
+                
+                     Item photography is deliberately absent. It belongs to the panel, and
+                     the panel still opens this app in "update" mode through its own deep
+                     link - that path does not go through these buttons at all. -->
+                <Border Grid.Row="0" BackgroundColor="#075E54" Padding="15,12" StrokeThickness="0">
+                    <VerticalStackLayout Spacing="12">
+                
+                        <Grid ColumnDefinitions="*, Auto">
+                            <VerticalStackLayout VerticalOptions="Center" Grid.Column="0">
+                                <Label Text="HO AI ASSISTANT" TextColor="White" FontAttributes="Bold" FontSize="18" />
+                                <Label x:Name="ActiveAgentLabel" Text="Agent: Default" TextColor="#A5D6A7" FontSize="11" />
+                            </VerticalStackLayout>
+                            <Button Grid.Column="1" x:Name="MenuButton" Text="⋮" Clicked="OpenSettings_Clicked" BackgroundColor="Transparent" TextColor="White" FontSize="26" FontAttributes="Bold" WidthRequest="44" HeightRequest="44" Padding="0" VerticalOptions="Center" />
+                        </Grid>
+                
+                        <!-- Three equal columns, so every target is a third of the screen wide
+                             and comfortably past the 40px a thumb needs on the narrowest phone. -->
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                            <Button Grid.Column="0" x:Name="TabChatButton" Text="💬 Chat" Clicked="TabChat_Clicked" BackgroundColor="#25D366" TextColor="White" FontSize="14" FontAttributes="Bold" HeightRequest="42" CornerRadius="21" Padding="0" />
+                            <Button Grid.Column="1" x:Name="TabReceiptButton" Text="🧾 Receipt" Clicked="TabReceipt_Clicked" BackgroundColor="#128C7E" TextColor="White" FontSize="14" HeightRequest="42" CornerRadius="21" Padding="0" />
+                            <Button Grid.Column="2" x:Name="TabBarcodeButton" Text="🏷️ Barcode" Clicked="TabBarcode_Clicked" BackgroundColor="#128C7E" TextColor="White" FontSize="14" HeightRequest="42" CornerRadius="21" Padding="0" />
+                        </Grid>
+                
+                    </VerticalStackLayout>
                 </Border>
 
                 <Border x:Name="SelectionBar" Grid.Row="1" BackgroundColor="White" Padding="10,8" StrokeThickness="0" IsVisible="False">
@@ -55,12 +75,10 @@
                         <Button Text="ⓘ" Clicked="ToggleDebug_Clicked" Grid.Column="2" BackgroundColor="Transparent" TextColor="Yellow" FontSize="20" WidthRequest="40" HeightRequest="40" Padding="0" />
                     </Grid>
                     <Label x:Name="DebugLabel" IsVisible="False" Text="Debug: Waiting..." TextColor="Yellow" FontSize="11" HorizontalOptions="Center" Margin="0,0,0,10" />
-                    <HorizontalStackLayout HorizontalOptions="Center" Spacing="8">
-                        <Button Text="Item" Clicked="TestItem_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
-                        <Button Text="Barcode" Clicked="TestBarcode_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
-                        <Button Text="Receipt" Clicked="TestReceipt_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
-                        <Button Text="Stylist" Clicked="TestStylist_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" Padding="10,0" CornerRadius="8" />
-                    </HorizontalStackLayout>
+                    <!-- [REMOVED v2026.9.24] The Item / Barcode / Receipt / Stylist row stood
+                         here. Its handlers were named Test*_Clicked because that is what they
+                         were - debug shortcuts that became the only way to pick a mode. The
+                         mode is now chosen on the chat screen, or sent by the panel. -->
                 </VerticalStackLayout>
 
                 <Grid x:Name="BarcodeOverlay" IsVisible="False">
@@ -88,6 +106,12 @@
                 </HorizontalStackLayout>
 
                 <Button x:Name="CaptureButton" Text="📸 Capture" FontAttributes="Bold" FontSize="20" TextColor="White" BackgroundColor="#03a9f4" CornerRadius="35" WidthRequest="200" HeightRequest="70" VerticalOptions="End" Margin="0,0,0,40" Clicked="CaptureButton_Clicked" />
+
+                <!-- [ADDED v2026.9.24] Send a PDF receipt that already exists instead of
+                     photographing one. Shown only in receipt mode - see ApplyContext.
+                     Sits above and beside Capture so it never covers it, and is 130x50
+                     so it stays a comfortable touch target on a phone. -->
+                <Button x:Name="PdfButton" Text="📄 PDF" IsVisible="False" FontAttributes="Bold" FontSize="16" TextColor="White" BackgroundColor="#7e57c2" CornerRadius="25" WidthRequest="130" HeightRequest="50" VerticalOptions="End" HorizontalOptions="End" Margin="0,0,20,130" Clicked="PickPdf_Clicked" />
             </Grid>
 
             <Grid x:Name="LoadingOverlay" IsVisible="False" BackgroundColor="#99000000" ZIndex="200">
@@ -120,8 +144,26 @@
                             <Label Text="Conversation Agent ID:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
                             <Entry x:Name="AgentIdEntry" Placeholder="e.g., conversation.ho_ai_agent" TextColor="White" BackgroundColor="#111" />
 
-                            <Label Text="HA Notify Device ID:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
-                            <Entry x:Name="NotifyIdEntry" Placeholder="e.g., mobile_app_s20_ultra" TextColor="White" BackgroundColor="#111" />
+                            <!-- [MODIFIED v2026.9.26 | 2026-09-26] One phone became a household. The
+                                 first row is the phone a reminder goes to when no name is spoken;
+                                 every row after it is somebody who can be named instead.
+                            
+                                 The id is the Home Assistant DEVICE id, from Settings > Devices -
+                                 the value in the page address. A notify slug will not do: the
+                                 reminder agent looks the id up in the device registry, and given
+                                 anything else it finds nothing and the reminder goes to whoever
+                                 asked instead, without a word. -->
+                            <Label Text="People and phones:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
+                            <Label Text="A reminder goes to the first phone unless a name below is spoken. Separate a person&apos;s names with commas." TextColor="#666" FontSize="10" />
+                            
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <Entry x:Name="PrimaryNameEntry" Grid.Column="0" Placeholder="Name, alias (you)" TextColor="White" BackgroundColor="#111" />
+                                <Entry x:Name="NotifyIdEntry" Grid.Column="1" Placeholder="Device ID (32 hex)" TextColor="White" BackgroundColor="#111" />
+                            </Grid>
+                            
+                            <VerticalStackLayout x:Name="UsersList" Spacing="8" />
+                            
+                            <Button Text="➕ Add person" Clicked="AddUser_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" CornerRadius="8" HorizontalOptions="Start" Padding="14,0" />
 
                             <Label Text="Microphone Source:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
                             <HorizontalStackLayout Spacing="10" VerticalOptions="Center">

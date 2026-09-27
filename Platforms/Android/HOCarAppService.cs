@@ -1,4 +1,5 @@
-﻿// [ADDED v4.5.0 | 2026-05-02] Purpose: Merged the missing CarAppService (gateway) with the existing brilliant voice-activated HOMainScreen logic.
+﻿// [MODIFIED v2026.9.24 | 2026-09-24] Purpose: Nine comments translated to English (RULE 17). No behaviour change.
+// [ADDED v4.5.0 | 2026-05-02] Purpose: Merged the missing CarAppService (gateway) with the existing brilliant voice-activated HOMainScreen logic.
 using Android.App;
 using Android.Content;
 using AndroidX.Car.App;
@@ -9,10 +10,10 @@ using Action = AndroidX.Car.App.Model.Action;
 
 namespace HO_Mind_AI.Platforms.Android
 {
-    // הוספנו Name מפורש כדי למנוע מ-MAUI לעוות את השם בקימפול
+    // An explicit Name, so MAUI does not mangle it at compile time.
     [Service(Exported = true, Name = "com.hocamera.app.HOCarAppService")]
 
-    // שינינו את הקטגוריה ל-POI כדי שתתאים ל-API Level 1
+    // Category POI, so it matches car API level 1.
     [IntentFilter(new[] { "androidx.car.app.CarAppService" }, Categories = new[] { "androidx.car.app.category.POI" })]
     public class HOCarAppService : CarAppService
     {
@@ -28,7 +29,7 @@ namespace HO_Mind_AI.Platforms.Android
     }
 
     // ==========================================
-    // 2. CAR SESSION (הקוד המקורי שלך - לא נגעתי)
+    // 2. CAR SESSION (unchanged).
     // ==========================================
     public class HOCarSession : Session
     {
@@ -39,7 +40,7 @@ namespace HO_Mind_AI.Platforms.Android
     }
 
     // ==========================================
-    // 3. CAR SCREEN (הקוד המקורי שלך - פותח מיקרופון מיד)
+    // 3. CAR SCREEN (unchanged - opens the microphone immediately).
     // ==========================================
     public class HOMainScreen : Screen
     {
@@ -48,26 +49,26 @@ namespace HO_Mind_AI.Platforms.Android
 
         public HOMainScreen(CarContext carContext) : base(carContext)
         {
-            // 1. עדכון בזמן אמת של הטקסט
+            // 1. Live text update.
             FloatingVoiceService.OnCarSttUpdated = (text) =>
             {
                 _currentText = string.IsNullOrWhiteSpace(text) ? "Listening..." : text;
-                // שימוש במנגנון ה-UI הבטוח של MAUI
+                // Uses the thread-safe MAUI UI mechanism.
                 Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(() => Invalidate());
             };
 
-            // 2. האזנה לסיום הקלטה כדי לסגור את המסך של הרכב
+            // 2. Listens for the end of recording, to close the car screen.
             FloatingVoiceService.OnCarListeningStopped = () =>
             {
                 if (!_isClosing)
                 {
                     _isClosing = true;
-                    // חזרה למסך הקודם ברכב (לדוגמה, Waze)
+                    // Back to the previous car screen (Waze, for example).
                     Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(() => CarContext.FinishCarApp());
                 }
             };
 
-            // 3. הפעלת המיקרופון באופן אוטומטי
+            // 3. Starts the microphone automatically.
             var intent = new Intent(CarContext, typeof(FloatingVoiceService));
             intent.SetAction("START_LISTENING");
 

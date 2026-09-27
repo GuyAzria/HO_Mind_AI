@@ -1,11 +1,6 @@
-﻿// [ADDED v2.85.0 | 2026-05-07] Purpose: Added logic to detect if the app was launched from device boot, and if so, immediately move it to the background so the user is not interrupted.
-// [ADDED v2.84.0 | 2026-05-04] Purpose: Added ViewTreeObserver.OnGlobalLayoutListener to detect keyboard close natively via root view height change, and reset ChatLayer margin through MainPage.ResetKeyboardMargin().
-// [MODIFIED v1.4.0 | 2026-03-31] Handled .NET 10 strict nullability warnings.
-// [MODIFIED v1.4.1 | 2026-04-04] Added Intent assignment in OnNewIntent.
-// [MODIFIED v1.3.0 | 2026-03-31] Migrated from deprecated MessagingCenter.
-// [MODIFIED v1.2.0 | 2026-03-30] Extracts translated instruction strings.
-// [MODIFIED v1.6.0 | 2026-04-27] Forced Android Window Format to Translucent.
-// [MODIFIED v2.59.0 | 2026-04-28] Purpose: Applied user's deep-dive solution. Swapped Maui.SplashTheme for custom TransparentTheme. Added LayoutNoLimits and NotTouchModal flags. Cleared DimBehind.
+﻿// [MODIFIED v2026.9.24 | 2026-09-24] Purpose: Delivers the PDF picker result to
+//   PdfPicker, and two comments translated to English (RULE 17).
+// [ADDED v2.85.0 | 2026-05-07] Purpose: Added logic to detect if the app was launched from device boot, and if so, immediately move it to the background so the user is not interrupted.
 
 using Android.App;
 using Android.Content;
@@ -33,7 +28,7 @@ namespace HO_Mind_AI
         {
             base.OnCreate(savedInstanceState);
 
-            // ✅ בדיקת הרשאת Overlay (חובה!)
+            // Overlay permission check - required by the floating assistant.
             if (Build.VERSION.SdkInt >= BuildVersionCodes.M)
             {
                 if (!Android.Provider.Settings.CanDrawOverlays(this))
@@ -47,7 +42,7 @@ namespace HO_Mind_AI
                 }
             }
 
-            // חלון שקוף
+            // Transparent window.
             if (Window != null)
             {
                 Window.AddFlags(WindowManagerFlags.LayoutNoLimits);
@@ -121,6 +116,18 @@ namespace HO_Mind_AI
             }
 
             HandleIntent(intent);
+        }
+
+        // [ADDED v2026.9.24] The PDF picker is started with
+        // StartActivityForResult because MAUI FilePicker cannot open in a
+        // chosen folder. Its result comes back here and nowhere else.
+        protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+        {
+            base.OnActivityResult(requestCode, resultCode, data);
+            if (requestCode == HO_Mind_AI.Platforms.Android.PdfPicker.RequestCode)
+            {
+                HO_Mind_AI.Platforms.Android.PdfPicker.Deliver(resultCode, data);
+            }
         }
 
         private void HandleIntent(Intent? intent)

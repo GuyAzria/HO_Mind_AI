@@ -1,14 +1,27 @@
-﻿// [ADDED v2.87.0 | 2026-05-12] Purpose: Added static volume override mechanisms (ApplyCustomVolume/RestoreCustomVolume) and Settings UI logic to force volume levels during TTS/beeps, even when device is muted.
-// [ADDED v2.86.0 | 2026-05-07] Purpose: Added live chunk processing for continuous meeting transcription. Each phrase captured by STT is sent live to the UI as a distinct line with a dash to simulate turn-taking.
-// [ADDED v2.85.0 | 2026-05-05] Purpose: Added static Action OnVoiceSessionStarted to stop active TTS when ghost screen opens or resets.
-// [ADDED v2.84.0 | 2026-05-04] Purpose: Added static ResetKeyboardMargin() called from MainActivity ViewTreeObserver when keyboard closes natively — the only reliable method under LayoutNoLimits + Translucent window.
-// [ADDED v2.83.0 | 2026-05-04] Purpose: Triple Unfocused margin reset (immediate + 200ms + 600ms) and SizeChanged watchdog to guarantee full-screen layout is always restored when Android keyboard closes.
-// [ADDED v2.82.0 | 2026-05-04] Purpose: Added stop-word detection (Hebrew/English/Russian/Spanish/French) to cancel TTS immediately without sending to HA. Delayed margin reset so it fires AFTER the Android keyboard animation finishes (~350ms), restoring the full-screen layout correctly.
-// [ADDED v2.81.0 | 2026-05-04] Purpose: Implemented an explicit dynamic bottom margin on the ChatLayer to aggressively fix the Android keyboard overlap issue, ensuring the input field is never hidden.
-// [ADDED v2.80.0 | 2026-05-04] Purpose: Separated camera and chat environments by toggling background opacity. Solid backgrounds re-enable Android's native keyboard 'Resize' functionality, solving the overlapping issue natively without translation hacks.
-// [ADDED v2.79.0 | 2026-05-04] Purpose: Reordered top bars so Camera is on top and selection bar is below it. Replaced failed native keyboard resize with manual TranslationY shift. Removed the 'Copied' alert for silent copying.
-// [MODIFIED v2.78.0 | 2026-05-04] Purpose: Changed Android specific soft input adjust mode to 'Pan' to fix keyboard overlapping on transparent windows, and bound UI visibility logic to Shell.TitleView buttons.
-// [MODIFIED v2.77.0 | 2026-05-04] Purpose: Resolved 'ambiguous reference' compiler error by explicitly fully qualifying all references to Microsoft.Maui.Controls.Application throughout the codebase.
+﻿// [MODIFIED v2026.9.24 | 2026-09-24] Purpose: Token moved from plaintext
+//   Preferences to the device secure store; blanket acceptance of any TLS
+//   certificate removed; a failed upload is now reported instead of
+//   swallowed; untrusted text is escaped before it reaches the HTML label;
+//   the duplicated Home Assistant client construction is replaced by
+//   HaCredentials, and the duplicated voice-language mapping by
+//   VoiceLanguage. Cleartext HTTP over the VPN is unchanged and still works.
+//   Also adds the PDF receipt button and its handler, and the redesigned
+//   header: chat stays the screen the app opens on, settings moved behind a
+//   three-dot button, and receipt and barcode became the two actions. A scan
+//   started in the app goes to the new app_scan endpoint, which scans inside
+//   Home Assistant, so it no longer needs a browser with the panel open.
+//   [2026-09-26] A barcode now completes: the lookup only suggests a name, so
+//   the confirmed name is sent back through RESOLVE_BARCODE, which is the step
+//   that actually creates the pending item.
+//   [2026-09-26] Settings hold a household rather than one phone: a name and a
+//   device id per person. A command naming one of them is aimed at that phone,
+//   and the chat says so, because the match is a name in a sentence and cannot
+//   tell "remind Yulia" from "remind me to call Yulia". Names take several
+//   forms separated by commas, and are compared on composed Unicode, so the
+//   same person matches whichever language the sentence was spoken in.
+//   Sending a typed message now closes the keyboard and gives the chat the
+//   whole screen back, which it did not.
+// [ADDED v2.87.0 | 2026-05-12] Purpose: Added static volume override mechanisms (ApplyCustomVolume/RestoreCustomVolume) and Settings UI logic to force volume levels during TTS/beeps, even when device is muted.
 // dotnet publish -f net10.0-android -c Release -p:AndroidPackageFormat=apk
 
 using System;
@@ -46,6 +59,19 @@ namespace HO_Mind_AI
         public static Action<string>? OnTranscriptionChunkReceived;
 
         private string _currentContext = "chat";
+
+        // [ADDED v2026.9.24] Which of the two routes this scan belongs to.
+        //
+        // false: the panel launched this app through its deep link, so the
+        //        result must go back the way it always has - ext_camera_upload
+        //        fires an event and the open panel finishes the job.
+        // true:  the user started the scan inside this app, where there may be
+        //        no panel open at all, so it goes to app_scan and Home
+        //        Assistant does the work itself.
+        //
+        // ProcessPayload clears it, so a deep link always wins over whatever
+        // the user pressed here before.
+        private bool _startedInApp = false;
         private bool _isProcessing = false;
         private bool _isFrontCamera = false;
         private bool _isFlashOn = false;
@@ -61,7 +87,6 @@ namespace HO_Mind_AI
         private Dictionary<Border, string> _messageData = new();
         private Dictionary<Border, Microsoft.Maui.Graphics.Color> _originalColors = new();
 
-       // private readonly HttpClient _chatClient;
 
         private BlePinManager? _bleManager;
         private string _haConversationId = "";
@@ -138,21 +163,16 @@ namespace HO_Mind_AI
             "עצור", "stop", "стоп", "detener", "arrêt", "arret"
         };
 
-        private HttpMessageHandler GetVpnAwareHandler()
-        {
-#if ANDROID
-            var handler = new Xamarin.Android.Net.AndroidMessageHandler();
-            handler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
-            return handler;
-#else
-            return new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-#endif
-        }
+        // [MODIFIED v2026.9.24] GetVpnAwareHandler() was here. It set
+        // ServerCertificateCustomValidationCallback to a lambda returning
+        // true for EVERY certificate, on a client that carries the Home
+        // Assistant token. It now lives in HaCredentials.CreateHandler()
+        // without that callback. Plain HTTP is unaffected: no certificate is
+        // presented over http://, so nothing validates and nothing changes.
 
         public MainPage()
         {
             Current = this;
-          //  _chatClient = new HttpClient(GetVpnAwareHandler()) { Timeout = TimeSpan.FromSeconds(15) };
 
             // [ADDED v2.85.0 | 2026-05-05] Purpose: Register action to cancel TTS.
             OnVoiceSessionStarted = () =>
@@ -416,11 +436,11 @@ namespace HO_Mind_AI
             }
         }
 
-        private string GetCurrentCultureCode()
-        {
-            string savedLang = Preferences.Get("voice_lang", "English (US)");
-            return savedLang switch { "Hebrew (Israel)" => "he-IL", "French (France)" => "fr-FR", "Russian (Russia)" => "ru-RU", "Arabic (SA)" => "ar-SA", _ => "en-US" };
-        }
+        // [MODIFIED v2026.9.24] Delegates to VoiceLanguage, which is now the
+        // one owner of the mapping. The identical switch expression also lived
+        // in FloatingVoiceService, so a new language had to be added twice.
+        // Kept as a method so both of its callers are unchanged.
+        private string GetCurrentCultureCode() => VoiceLanguage.CultureCode();
 
         private async Task SpeakTextAsync(string text)
         {
@@ -483,35 +503,113 @@ namespace HO_Mind_AI
             await SendToHAConversation(text);
         }
 
+        // [FIXED v2026.9.26] Sending used to leave the keyboard up.
+        //
+        // The text was cleared but the entry kept the focus, so Android had no
+        // reason to close the keyboard - and because the keyboard never closed,
+        // Unfocused never fired and the 350px lift on ChatLayer stayed. The chat
+        // sat squeezed into the top half of the screen with a keyboard under it
+        // and nothing left to type.
+        //
+        // Three things, because this file records a long fight with this keyboard
+        // (see the v2.83 and v2.84 entries): drop the focus, ask Android directly,
+        // and put the margin back without waiting to be told.
         private void OnSendTextClicked(object? sender, EventArgs e)
         {
             if (ManualInput == null || string.IsNullOrWhiteSpace(ManualInput.Text)) return;
             string txt = ManualInput.Text;
             ManualInput.Text = "";
+
+            DismissKeyboard();
             ProcessInput(txt, isVoice: false);
         }
+
+        // Also used by the voice button, so a command spoken while the keyboard
+        // happened to be open does not leave it there either.
+        private void DismissKeyboard()
+        {
+            try { ManualInput?.Unfocus(); } catch (Exception) { }
+
+#if ANDROID
+            HideSoftKeyboardNative();
+#endif
+
+            // Reset now rather than waiting for Unfocused or for MainActivity to
+            // notice the keyboard has gone. Both still fire and both set it to the
+            // same value, so an extra reset cannot put the layout wrong.
+            if (ChatLayer != null) ChatLayer.Margin = new Thickness(0);
+
+            // The keyboard animates out over roughly a third of a second; scrolling
+            // before it has gone lands short of the newest message.
+            Task.Delay(400).ContinueWith(_ =>
+            {
+                Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    if (ChatLayer != null) ChatLayer.Margin = new Thickness(0);
+                    _ = ScrollToBottomAsync();
+                });
+            });
+        }
+
+#if ANDROID
+        // MAUI's Unfocus() is usually enough and on this screen it has not been:
+        // the window is translucent and runs under LayoutNoLimits, which is the
+        // configuration every keyboard workaround in this file exists for. Asking
+        // the input manager directly is the part that actually closes it.
+        private static void HideSoftKeyboardNative()
+        {
+            try
+            {
+                var activity = Microsoft.Maui.ApplicationModel.Platform.CurrentActivity;
+                if (activity == null) return;
+                var imm = (global::Android.Views.InputMethods.InputMethodManager?)
+                    activity.GetSystemService(global::Android.Content.Context.InputMethodService);
+                if (imm == null) return;
+                var focused = activity.CurrentFocus;
+                var token = focused?.WindowToken ?? activity.Window?.DecorView?.WindowToken;
+                if (token != null)
+                {
+                    imm.HideSoftInputFromWindow(token, global::Android.Views.InputMethods.HideSoftInputFlags.None);
+                }
+                focused?.ClearFocus();
+            }
+            catch (Exception)
+            {
+            }
+        }
+#endif
 
         // [MODIFIED v2.90.0 | 2026-05-13] Purpose: Increased HttpClient timeout from 15s to 60s in SendToHAConversation. Operations like 'Send to WhatsApp' involve external API calls on the HA side and take significantly longer than local intents like 'Add to list', causing premature client-side socket closures (Timeouts).
         private async Task SendToHAConversation(string text)
         {
             DeviceDisplay.Current.KeepScreenOn = true;
+
+            // [ADDED v2026.9.26] Who this one is for. Resolved once, before the
+            // retry loop, so a retry cannot announce the same thing twice.
+            //
+            // Shown in the chat whenever it is not the main phone. The match is a
+            // name appearing in the sentence and nothing cleverer, so "remind me to
+            // call Yulia" will be aimed at her phone - wrong, and impossible to tell
+            // apart without reading the sentence, which is Home Assistant's job. The
+            // app therefore never does this silently.
+            var addressee = UserRoster.Addressee(text);
+            if (addressee != null)
+            {
+                AddChatMessage("System", $"\u2192 {addressee.Name}", false);
+            }
+
             int maxRetries = 2; // We will try max 2 times
 
             for (int i = 0; i < maxRetries; i++)
             {
                 try
                 {
-                    string haUrl = Preferences.Get("ha_url", "").TrimEnd('/');
-                    string token = Preferences.Get("ha_token", "");
+                    string haUrl = HaCredentials.GetUrl();
                     string lang = GetCurrentCultureCode().Split('-')[0];
                     string agentId = Preferences.Get("ha_agent_id", "conversation.ho_ai_agent").Trim();
-                    string notifyId = Preferences.Get("ha_notify_id", "").Trim();
+                    string notifyId = addressee?.DeviceId ?? UserRoster.PrimaryDeviceId();
 
-                    var handler = GetVpnAwareHandler();
-
-                    // שינוי קריטי: הגדלת ה-Timeout ל-60 שניות כדי לאפשר לשרת לסיים פעולות ארוכות כמו וואטסאפ
-                    using var localClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) };
-                    localClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    using var localClient = await HaCredentials.CreateClientAsync(TimeSpan.FromSeconds(60));
 
                     var payload = new Dictionary<string, object> { { "text", text }, { "language", lang } };
                     if (!string.IsNullOrEmpty(agentId)) payload.Add("agent_id", agentId);
@@ -595,14 +693,30 @@ namespace HO_Mind_AI
                     if (emailMatch.Success) { urlToLaunch = emailMatch.Value; platform = "Email"; }
                 }
             }
-            if (urlToLaunch != null) formattedMessage = $"✅ Sent to {platform}";
+            // [MODIFIED v2026.9.24] Nothing has been sent at this point. The
+            // launcher only OPENS the other app with the message prefilled;
+            // the user still has to press send there. "Sent" was a claim
+            // this app could not back up.
+            if (urlToLaunch != null) formattedMessage = $"↗️ Opening {platform}...";
             return formattedMessage;
         }
+
+        // [MODIFIED v2026.9.24] Escapes before it formats. The reply comes from
+        // a language model, and once orders are imported a product name comes
+        // from a shop page. Both are untrusted text going into a Label whose
+        // TextType is Html, so "<" has to stay text. The order matters:
+        // escape first, then add markup, or the <b> tags below become visible.
+        private static string EscapeHtml(string raw) => raw
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;");
 
         private string FormatMessageForUI(string rawText)
         {
             if (string.IsNullOrEmpty(rawText)) return "";
-            string html = rawText.Replace("\r\n", "<br>").Replace("\n", "<br>");
+            string html = EscapeHtml(rawText);
+            html = html.Replace("\r\n", "<br>").Replace("\n", "<br>");
             html = Regex.Replace(html, @"\*\*(.*?)\*\*", "<b>$1</b>");
             html = Regex.Replace(html, @"\*(.*?)\*", "<i>$1</i>");
             return html;
@@ -647,7 +761,7 @@ namespace HO_Mind_AI
                     Padding = new Thickness(10),
                     StrokeThickness = 0,
                     StrokeShape = new RoundRectangle { CornerRadius = new CornerRadius(10) },
-                    Content = new Label { Text = isUser ? $"{sender}: {msg}" : $"<b>{sender}:</b><br>{FormatMessageForUI(msg)}", TextType = TextType.Html, TextColor = Microsoft.Maui.Graphics.Colors.Black }
+                    Content = new Label { Text = isUser ? $"{EscapeHtml(sender)}: {EscapeHtml(msg)}" : $"<b>{EscapeHtml(sender)}:</b><br>{FormatMessageForUI(msg)}", TextType = TextType.Html, TextColor = Microsoft.Maui.Graphics.Colors.Black }
                 };
 
                 _originalColors[border] = border.BackgroundColor;
@@ -708,6 +822,9 @@ namespace HO_Mind_AI
                     var data = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonPayload);
                     if (data != null)
                     {
+                        // [ADDED v2026.9.24] The panel launched us, so the result
+                        // goes back the way it always has.
+                        _startedInApp = false;
                         string ctx = data.ContainsKey("ctx") ? data["ctx"] : "chat";
                         if (ctx == "chat") SwitchToChat_Clicked(this, EventArgs.Empty); else SwitchToCamera_Clicked(this, EventArgs.Empty);
                         ApplyContext(ctx, data.GetValueOrDefault("m", ""), data.GetValueOrDefault("s", ""), data.GetValueOrDefault("b", ""));
@@ -718,10 +835,49 @@ namespace HO_Mind_AI
         }
 
         private void ToggleDebug_Clicked(object? sender, EventArgs e) { if (DebugLabel != null) DebugLabel.IsVisible = !DebugLabel.IsVisible; }
-        private void TestItem_Clicked(object? sender, EventArgs e) => ApplyContext("update", "Capture Item", "Take a clear picture", "📸 Capture");
-        private void TestBarcode_Clicked(object? sender, EventArgs e) => ApplyContext("barcode", "Barcode Scanner", "Scan barcodes", "");
-        private void TestReceipt_Clicked(object? sender, EventArgs e) => ApplyContext("invoice", "Receipt Scanner", "Ensure text is readable", "📸 Scan Receipt");
-        private void TestStylist_Clicked(object? sender, EventArgs e) => ApplyContext("stylist", "Stylist Mode", "Coming Soon", "📸 Stylist");
+        // [ADDED v2026.9.24] The two things this app does, reachable from the
+        // screen it opens on. They replace the Item / Barcode / Receipt / Stylist
+        // row, whose handlers were called Test*_Clicked because that is what they
+        // were: debug shortcuts that became the only way to choose a mode.
+        //
+        // ApplyContext takes the same strings the panel sends over its deep link,
+        // so both routes land the app in exactly the same state.
+        // [ADDED v2026.9.26] Leaving the chat closes the keyboard with it, so the
+        // camera never opens behind a keyboard and a lifted layout.
+        private void TabChat_Clicked(object? sender, EventArgs e)
+        {
+            DismissKeyboard();
+            SwitchToChat_Clicked(sender, e);
+            UpdateTabState("chat");
+        }
+
+        private void TabReceipt_Clicked(object? sender, EventArgs e)
+        {
+            _startedInApp = true;
+            ApplyContext("invoice", "Receipt Scanner", "Ensure text is readable", "📸 Scan Receipt");
+            SwitchToCamera_Clicked(sender, e);
+            UpdateTabState("invoice");
+        }
+
+        private void TabBarcode_Clicked(object? sender, EventArgs e)
+        {
+            _startedInApp = true;
+            ApplyContext("barcode", "Barcode Scanner", "Scan barcodes", "");
+            SwitchToCamera_Clicked(sender, e);
+            UpdateTabState("barcode");
+        }
+
+        // Which action is current, shown by filling one pill and leaving the
+        // other two outlined. There is no hover on a phone, so the state has to
+        // be visible without touching anything.
+        private void UpdateTabState(string context)
+        {
+            var active = Microsoft.Maui.Graphics.Color.FromArgb("#25D366");
+            var idle = Microsoft.Maui.Graphics.Color.FromArgb("#128C7E");
+            if (TabChatButton != null) TabChatButton.BackgroundColor = context == "chat" ? active : idle;
+            if (TabReceiptButton != null) TabReceiptButton.BackgroundColor = context == "invoice" ? active : idle;
+            if (TabBarcodeButton != null) TabBarcodeButton.BackgroundColor = context == "barcode" ? active : idle;
+        }
 
         private void CycleCamera_Clicked(object? sender, EventArgs e) { _currentZoom = _currentZoom >= 0.8f ? 0f : _currentZoom + 0.4f; if (barcodeView != null) barcodeView.SetZoom(_currentZoom); }
         private void SwitchCam_Clicked(object? sender, EventArgs e) { _isFrontCamera = !_isFrontCamera; _currentZoom = 0f; if (barcodeView != null) barcodeView.IsFrontCamera = _isFrontCamera; }
@@ -733,6 +889,9 @@ namespace HO_Mind_AI
             _currentContext = context.Trim().ToLowerInvariant();
             if (ModeTitleLabel != null) ModeTitleLabel.Text = _currentContext == "barcode" ? "📷 Mode: Barcode Scan" : (_currentContext == "invoice" ? "🧾 Mode: Receipt Scan" : "📸 Mode: Item Image");
             if (ScannedBarcodeLabel != null) ScannedBarcodeLabel.Text = "";
+            // [ADDED v2026.9.24] Sending an existing PDF only makes sense for a
+            // receipt, so the button follows the receipt context and nothing else.
+            if (PdfButton != null) PdfButton.IsVisible = _currentContext == "invoice";
             if (InstructionFrame != null) InstructionFrame.IsVisible = !string.IsNullOrWhiteSpace(m + s);
             if (InstructionLabel != null) InstructionLabel.Text = $"{m}\n{s}".Trim();
             if (barcodeView != null) { barcodeView.CameraMode = _currentContext == "barcode" ? CameraMode.Barcode : CameraMode.Photo; barcodeView.SetUseAiBg(_useAiBg); barcodeView.CameraContext = _currentContext; barcodeView.SetZoom(_currentZoom); }
@@ -784,37 +943,295 @@ namespace HO_Mind_AI
         {
             try
             {
-                string haUrl = Preferences.Get("ha_url", "") ?? ""; string token = Preferences.Get("ha_token", "") ?? ""; if (string.IsNullOrEmpty(haUrl)) return; haUrl = haUrl.Trim().TrimEnd('/');
+                string haUrl = HaCredentials.GetUrl();
+                if (string.IsNullOrEmpty(haUrl))
+                {
+                    await ShowAlertAsync("Not configured", "Set the Home Assistant address in Settings first.", "OK");
+                    return;
+                }
 
-                var handler = GetVpnAwareHandler();
+                // [MODIFIED v2026.9.24] A scan the AI has to read takes far longer
+                // than handing a photo to an open panel, so the app_scan route is
+                // given room to finish instead of closing the socket under it.
+                using var client = await HaCredentials.CreateClientAsync(
+                    TimeSpan.FromSeconds(_startedInApp ? 180 : 30));
 
-                using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+                // [ADDED v2026.9.24] Two routes, two endpoints.
+                //
+                // ext_camera_upload does not scan: it fires an event and the open
+                // panel does the work. That is right when the panel launched us and
+                // useless when nothing is listening - it answers 200 either way.
+                // app_scan runs the scan inside Home Assistant and answers with what
+                // actually happened, which is what a scan started here needs.
+                string url;
+                object payload;
+                if (_startedInApp)
+                {
+                    url = $"{haUrl}/api/home_organizer/app_scan";
+                    payload = isBarcode
+                        ? (object)new { kind = "barcode", barcode = payloadData, language = VoiceLanguage.LanguageCode() }
+                        : new { kind = "receipt", image_data = payloadData, mime_type = MimeOf(payloadData), language = VoiceLanguage.LanguageCode() };
+                }
+                else
+                {
+                    url = $"{haUrl}/api/home_organizer/ext_camera_upload";
+                    payload = isBarcode
+                        ? (object)new { barcode_data = payloadData, context = _currentContext }
+                        : new { image_data = payloadData, context = _currentContext, apply_ai_bg = _useAiBg };
+                }
 
-                object payload = isBarcode ? new { barcode_data = payloadData, context = _currentContext } : new { image_data = payloadData, context = _currentContext, apply_ai_bg = _useAiBg };
-                var response = await client.PostAsJsonAsync($"{haUrl}/api/home_organizer/ext_camera_upload", payload);
-                if (response.IsSuccessStatusCode) Microsoft.Maui.Controls.Application.Current?.Quit();
+                var response = await client.PostAsJsonAsync(url, payload);
+                // [MODIFIED v2026.9.24] A failed upload used to look exactly
+                // like one that worked: catch {} swallowed the exception, a
+                // non-success status was ignored, and the overlay closed
+                // either way. The photograph was gone and nothing said so.
+                if (response.IsSuccessStatusCode)
+                {
+                    // [MODIFIED v2026.9.24] Quitting is right only when the panel sent
+                    // us here: the user is looking at the browser and wants to be back
+                    // in it. A scan started in this app has nowhere to return to, so it
+                    // says what happened and stays open.
+                    if (_startedInApp)
+                    {
+                        _startedInApp = false;
+                        if (isBarcode)
+                        {
+                            // [FIXED v2026.9.26] The lookup only SUGGESTS a name; it
+                            // creates nothing. This used to stop here and tell the
+                            // user to open the panel and file an item that had never
+                            // been created - a success message for something that
+                            // did not happen. The second step is below.
+                            await FinishBarcodeAsync(payloadData,
+                                await response.Content.ReadAsStringAsync());
+                        }
+                        else
+                        {
+                            // [FIXED v2026.9.26] This used to announce that the lines
+                            // were waiting in the Review tab whatever came back. Five
+                            // different replies mean nothing was saved - the model
+                            // failed, the document could not be read, or the receipt
+                            // was a duplicate - and all five were reported as that
+                            // same success. Home Assistant already words the outcome;
+                            // it is shown instead of guessed.
+                            string said = SaidByHa(await response.Content.ReadAsStringAsync());
+                            await ShowAlertAsync("Home Organizer", string.IsNullOrWhiteSpace(said)
+                                ? "The receipt was sent, but Home Assistant did not say what happened."
+                                : said, "OK");
+                        }
+                        SwitchToChat_Clicked(this, EventArgs.Empty);
+                        UpdateTabState("chat");
+                    }
+                    else
+                    {
+                        Microsoft.Maui.Controls.Application.Current?.Quit();
+                    }
+                }
+                else
+                {
+                    // The body carries the reason when there is one; a bare status
+                    // code tells the user nothing they can act on.
+                    string why = SaidByHa(await response.Content.ReadAsStringAsync());
+                    await ShowAlertAsync("Upload failed", string.IsNullOrWhiteSpace(why)
+                        ? $"Home Assistant answered {(int)response.StatusCode} {response.StatusCode}."
+                        : why, "OK");
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                await ShowAlertAsync("Upload failed", ex.Message, "OK");
+            }
             finally { _isProcessing = false; if (LoadingOverlay != null) LoadingOverlay.IsVisible = false; }
         }
 
+        // [ADDED v2026.9.26] What Home Assistant said about a scan, in its own
+        // words. "result.response" is the sentence the panel would have shown -
+        // how many lines were stored, that the receipt was already saved, or that
+        // the document could not be read. "message" is there when the request was
+        // refused outright. Empty when the body carries neither, and the caller
+        // then says so rather than inventing an outcome.
+        private static string SaidByHa(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body)) return "";
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("result", out var result)
+                    && result.ValueKind == JsonValueKind.Object
+                    && result.TryGetProperty("response", out var said))
+                {
+                    return said.GetString() ?? "";
+                }
+                if (root.TryGetProperty("message", out var message))
+                {
+                    return message.GetString() ?? "";
+                }
+            }
+            catch (Exception)
+            {
+            }
+            return "";
+        }
+
+        // [ADDED v2026.9.26] The second half of a barcode scan.
+        //
+        // Scanning a barcode in Home Assistant is two steps and only the first was
+        // wired. Step one looks the code up - in the history of codes seen before,
+        // or by asking the model - and SUGGESTS a name. Step two is what actually
+        // creates the item, in the pending state the Review tab exists for.
+        //
+        // The name is confirmed rather than assumed, because a name guessed from a
+        // barcode is a guess, and because this is exactly what the panel does at
+        // the same point.
+        private async Task FinishBarcodeAsync(string barcode, string lookupBody)
+        {
+            string suggested = "";
+            try
+            {
+                using var doc = JsonDocument.Parse(lookupBody);
+                if (doc.RootElement.TryGetProperty("result", out var result))
+                {
+                    // "item" when this code has been seen before, so the name the
+                    // user chose last time comes back. "suggestion" when it has not.
+                    if (result.TryGetProperty("item", out var known)
+                        && known.TryGetProperty("name", out var knownName))
+                    {
+                        suggested = knownName.GetString() ?? "";
+                    }
+                    else if (result.TryGetProperty("suggestion", out var guess)
+                             && guess.TryGetProperty("name", out var guessName))
+                    {
+                        suggested = guessName.GetString() ?? "";
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // An unreadable reply is not a reason to lose the scan - the user
+                // can still type the name against the code below.
+            }
+
+            string? name = await Microsoft.Maui.ApplicationModel.MainThread.InvokeOnMainThreadAsync(
+                () => this.DisplayPromptAsync($"Barcode {barcode}", "What is this product?",
+                                              "Add", "Cancel", initialValue: suggested));
+            if (string.IsNullOrWhiteSpace(name)) return;   // the user cancelled
+
+            var (ok, body) = await PostAppScanAsync(new
+            {
+                kind = "resolve_barcode",
+                barcode,
+                name = name.Trim(),
+                language = VoiceLanguage.LanguageCode(),
+            }, TimeSpan.FromSeconds(120));
+
+            if (!ok)
+            {
+                await ShowAlertAsync("Not saved", body, "OK");
+                return;
+            }
+            // Home Assistant answers "Added <name> to the Review tab." when it
+            // stored the item, so that is what is shown.
+            string outcome = SaidByHa(body);
+            await ShowAlertAsync("Home Organizer", string.IsNullOrWhiteSpace(outcome)
+                ? $"\"{name.Trim()}\" was sent, but Home Assistant did not say what happened."
+                : outcome, "OK");
+        }
+
+        // [ADDED v2026.9.26] One place that posts to app_scan, so the scan route and
+        // the resolve route cannot drift apart.
+        private async Task<(bool ok, string body)> PostAppScanAsync(object payload, TimeSpan timeout)
+        {
+            string haUrl = HaCredentials.GetUrl();
+            if (string.IsNullOrEmpty(haUrl)) return (false, "The Home Assistant address is not set.");
+            try
+            {
+                using var client = await HaCredentials.CreateClientAsync(timeout);
+                var res = await client.PostAsJsonAsync($"{haUrl}/api/home_organizer/app_scan", payload);
+                string body = await res.Content.ReadAsStringAsync();
+                if (!res.IsSuccessStatusCode)
+                {
+                    return (false, $"Home Assistant answered {(int)res.StatusCode} {res.StatusCode}.");
+                }
+                return (true, body);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        // [ADDED v2026.9.24] Send a receipt that is already a PDF - an emailed
+        // invoice, a downloaded order - instead of photographing a screen.
+        //
+        // It travels the same route as a photograph: the same upload endpoint,
+        // the same event, the same receipt scanner. Only the data URL prefix
+        // differs, and that prefix is how the panel tells the two apart.
+        private async void PickPdf_Clicked(object? sender, EventArgs e)
+        {
+#if ANDROID
+            if (_isProcessing) return;
+
+            var uri = await HO_Mind_AI.Platforms.Android.PdfPicker.PickAsync();
+            if (uri == null) return;   // the user backed out
+
+            byte[]? bytes = HO_Mind_AI.Platforms.Android.PdfPicker.ReadAllBytes(uri);
+            if (bytes == null || bytes.Length == 0)
+            {
+                await ShowAlertAsync("Could not read the file", "That document could not be opened. Try picking it from the folder itself rather than from a recent-files shortcut.", "OK");
+                return;
+            }
+
+            // Base64 adds a third to the size, and the receiving end has its own
+            // body limit. Capped here so the user is told why, instead of the
+            // upload failing somewhere they cannot see.
+            const int MaxBytes = 7 * 1024 * 1024;
+            if (bytes.Length > MaxBytes)
+            {
+                await ShowAlertAsync("File is too large", $"This PDF is about {bytes.Length / (1024 * 1024)} MB. The limit is 7 MB.", "OK");
+                return;
+            }
+
+            _isProcessing = true;
+            if (LoadingOverlay != null) LoadingOverlay.IsVisible = true;
+            await SendDataToHA("data:application/pdf;base64," + Convert.ToBase64String(bytes), isBarcode: false);
+#else
+            await ShowAlertAsync("Not available here", "Picking a PDF is implemented for Android.", "OK");
+#endif
+        }
+
+        // [ADDED v2026.9.24] The type is already declared at the front of the data
+        // URL, so it is read from there rather than tracked in a second place that
+        // could disagree with it.
+        private static string MimeOf(string dataUrl)
+        {
+            if (string.IsNullOrEmpty(dataUrl) || !dataUrl.StartsWith("data:")) return "image/jpeg";
+            int semi = dataUrl.IndexOf(';');
+            if (semi <= 5) return "image/jpeg";
+            return dataUrl.Substring(5, semi - 5);
+        }
+
         private Task ShowAlertAsync(string title, string message, string cancel) => Microsoft.Maui.ApplicationModel.MainThread.InvokeOnMainThreadAsync(() => this.DisplayAlertAsync(title, message, cancel));
-        private async void TestSTT_Clicked(object sender, EventArgs e) { string toSpeak = "Testing STT removed from this mode."; if (TestInput != null) TestInput.Text = toSpeak; }
+        private void TestSTT_Clicked(object sender, EventArgs e) { string toSpeak = "Testing STT removed from this mode."; if (TestInput != null) TestInput.Text = toSpeak; }
         private async void TestTTS_Clicked(object sender, EventArgs e) { string toSpeak = "Testing voice audio output."; if (TestInput != null && !string.IsNullOrWhiteSpace(TestInput.Text) && TestInput.Text != "Listening...") toSpeak = TestInput.Text; await SpeakTextAsync(toSpeak); }
         private void OpenSettings_Clicked(object? sender, EventArgs e) { if (SettingsModal != null) SettingsModal.IsVisible = true; }
         private void Close_Clicked(object? sender, EventArgs e) => Microsoft.Maui.Controls.Application.Current?.Quit();
 
         private void LoadSettings()
         {
-            if (ServerUrlEntry != null) ServerUrlEntry.Text = Preferences.Get("ha_url", "");
-            if (TokenEntry != null) TokenEntry.Text = Preferences.Get("ha_token", "");
+            if (ServerUrlEntry != null) ServerUrlEntry.Text = HaCredentials.GetUrl();
+            // [MODIFIED v2026.9.24] The token lives in the device secure store
+            // and is read asynchronously. LoadSettings() stays synchronous
+            // because the constructor calls it, so the field is filled when
+            // the value arrives rather than being awaited here.
+            if (TokenEntry != null) _ = FillTokenFieldAsync();
             if (AgentIdEntry != null) AgentIdEntry.Text = Preferences.Get("ha_agent_id", "conversation.ho_ai_agent");
-            if (NotifyIdEntry != null) NotifyIdEntry.Text = Preferences.Get("ha_notify_id", "");
+            if (NotifyIdEntry != null) NotifyIdEntry.Text = UserRoster.PrimaryDeviceId();
+            if (PrimaryNameEntry != null) PrimaryNameEntry.Text = UserRoster.PrimaryName();
+            RenderUsersList();
             if (UseBtMicSwitch != null) UseBtMicSwitch.IsToggled = Preferences.Get("use_bt_mic", false);
             if (UseShakeMicSwitch != null) UseShakeMicSwitch.IsToggled = Preferences.Get("use_shake_mic", false);
             if (EnableLoggingSwitch != null) EnableLoggingSwitch.IsToggled = Preferences.Get("enable_file_logging", false);
-            if (LanguagePicker != null) { string savedLang = Preferences.Get("voice_lang", "English (US)"); int index = LanguagePicker.Items.IndexOf(savedLang); LanguagePicker.SelectedIndex = index >= 0 ? index : 0; }
+            if (LanguagePicker != null) { string savedLang = VoiceLanguage.DisplayName(); int index = LanguagePicker.Items.IndexOf(savedLang); LanguagePicker.SelectedIndex = index >= 0 ? index : 0; }
             if (ActiveAgentLabel != null) ActiveAgentLabel.Text = $"Agent: {Preferences.Get("ha_agent_id", "conversation.ho_ai_agent")}";
 
             // [ADDED v2.87.0] Load volume slider
@@ -825,22 +1242,118 @@ namespace HO_Mind_AI
             }
         }
 
+        // [ADDED v2026.9.26] The people rows in Settings, built here because the
+        // list has no fixed length.
+        private void RenderUsersList()
+        {
+            if (UsersList == null) return;
+            UsersList.Children.Clear();
+            foreach (var user in UserRoster.Others())
+            {
+                UsersList.Children.Add(BuildUserRow(user));
+            }
+        }
+
+        private View BuildUserRow(HoUser user)
+        {
+            var name = new Entry
+            {
+                Placeholder = "Name, alias, ...",
+                Text = user.Name,
+                TextColor = Microsoft.Maui.Graphics.Colors.White,
+                BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#111"),
+            };
+            var id = new Entry
+            {
+                Placeholder = "Device ID (32 hex)",
+                Text = user.DeviceId,
+                TextColor = Microsoft.Maui.Graphics.Colors.White,
+                BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#111"),
+            };
+            var remove = new Button
+            {
+                Text = "\u2715",
+                BackgroundColor = Microsoft.Maui.Graphics.Colors.Transparent,
+                TextColor = Microsoft.Maui.Graphics.Colors.White,
+                WidthRequest = 40,
+                HeightRequest = 40,
+                Padding = 0,
+            };
+
+            var row = new Grid
+            {
+                ColumnSpacing = 8,
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Auto },
+                },
+            };
+            row.Add(name, 0);
+            row.Add(id, 1);
+            row.Add(remove, 2);
+
+            // Removed from the screen only. Nothing is stored until Save, so a
+            // row taken out by mistake comes back by closing Settings.
+            remove.Clicked += (s, e) => UsersList?.Children.Remove(row);
+            return row;
+        }
+
+        private void AddUser_Clicked(object? sender, EventArgs e)
+        {
+            UsersList?.Children.Add(BuildUserRow(new HoUser()));
+        }
+
+        // What is on screen right now, which is what Save writes.
+        private List<HoUser> ReadUserRows()
+        {
+            var users = new List<HoUser>();
+            if (UsersList == null) return users;
+            foreach (var child in UsersList.Children)
+            {
+                if (child is not Grid row) continue;
+                var entries = row.Children.OfType<Entry>().ToList();
+                if (entries.Count < 2) continue;
+                users.Add(new HoUser
+                {
+                    Name = entries[0].Text ?? "",
+                    DeviceId = entries[1].Text ?? "",
+                });
+            }
+            return users;
+        }
+
+        private async Task FillTokenFieldAsync()
+        {
+            string token = await HaCredentials.GetTokenAsync();
+            Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(() =>
+            {
+                if (TokenEntry != null) TokenEntry.Text = token;
+            });
+        }
+
         // [ADDED v2.87.0] Event handler for the volume slider label
         private void VolumeSlider_ValueChanged(object sender, ValueChangedEventArgs e)
         {
             if (VolumeLabel != null) VolumeLabel.Text = $"{(int)e.NewValue}%";
         }
 
-        private void SaveSettings_Clicked(object? sender, EventArgs e)
+        private async void SaveSettings_Clicked(object? sender, EventArgs e)
         {
-            Preferences.Set("ha_url", ServerUrlEntry?.Text?.Trim() ?? "");
-            Preferences.Set("ha_token", TokenEntry?.Text?.Trim() ?? "");
+            HaCredentials.SetUrl(ServerUrlEntry?.Text);
+            // [MODIFIED v2026.9.24] The token goes to the device secure store.
+            // When that store refuses it there is deliberately no fallback to
+            // writing plain text - the failure is reported below instead.
+            bool tokenSaved = await HaCredentials.TrySetTokenAsync(TokenEntry?.Text?.Trim() ?? "");
             Preferences.Set("ha_agent_id", AgentIdEntry?.Text?.Trim() ?? "conversation.ho_ai_agent");
-            Preferences.Set("ha_notify_id", NotifyIdEntry?.Text?.Trim() ?? "");
+            UserRoster.SetPrimaryDeviceId(NotifyIdEntry?.Text);
+            UserRoster.SetPrimaryName(PrimaryNameEntry?.Text);
+            UserRoster.SaveOthers(ReadUserRows());
             if (UseBtMicSwitch != null) Preferences.Set("use_bt_mic", UseBtMicSwitch.IsToggled);
             if (UseShakeMicSwitch != null) Preferences.Set("use_shake_mic", UseShakeMicSwitch.IsToggled);
             if (EnableLoggingSwitch != null) Preferences.Set("enable_file_logging", EnableLoggingSwitch.IsToggled);
-            if (LanguagePicker?.SelectedIndex >= 0) Preferences.Set("voice_lang", LanguagePicker.Items[LanguagePicker.SelectedIndex]);
+            if (LanguagePicker?.SelectedIndex >= 0) VoiceLanguage.SetDisplayName(LanguagePicker.Items[LanguagePicker.SelectedIndex]);
             if (ActiveAgentLabel != null) ActiveAgentLabel.Text = $"Agent: {AgentIdEntry?.Text?.Trim() ?? "conversation.ho_ai_agent"}";
 
             // [ADDED v2.87.0] Save volume
@@ -848,6 +1361,22 @@ namespace HO_Mind_AI
 
             if (SettingsModal != null) SettingsModal.IsVisible = false;
             UpdateBleManagerStatus();
+
+            // [ADDED v2026.9.26] An id that is not a device id resolves to nothing,
+            // and the reminder then goes to whoever asked rather than the person
+            // named - silently. Said out loud here instead.
+            var suspect = UserRoster.SuspectEntries();
+            if (suspect.Count > 0)
+            {
+                await ShowAlertAsync("Check these IDs",
+                    "A Home Assistant device ID is 32 hexadecimal characters, from Settings > Devices. These do not look like one, and a reminder aimed at them will arrive on your own phone instead:\n\n"
+                    + string.Join("\n", suspect), "OK");
+            }
+
+            if (!tokenSaved)
+            {
+                await ShowAlertAsync("Token not saved", "This device secure storage refused the token, so it was not saved. It is deliberately not written in plain text instead.", "OK");
+            }
         }
 
         private async void ViewLogs_Clicked(object sender, EventArgs e)
