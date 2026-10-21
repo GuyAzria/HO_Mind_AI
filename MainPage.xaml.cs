@@ -21,7 +21,14 @@
 //   same person matches whichever language the sentence was spoken in.
 //   Sending a typed message now closes the keyboard and gives the chat the
 //   whole screen back, which it did not.
-// [ADDED v2.87.0 | 2026-05-12] Purpose: Added static volume override mechanisms (ApplyCustomVolume/RestoreCustomVolume) and Settings UI logic to force volume levels during TTS/beeps, even when device is muted.
+// [MODIFIED v2026.10.21 | 2026-10-21] Purpose: a phone's device id is picked
+//   from the phones Home Assistant knows instead of being copied out of a
+//   desktop browser's address bar. Each phone field is a dropdown: tapped
+//   after the address and token are entered, it lists the devices with their
+//   owner, and the one chosen is shown by name while its id is kept hidden;
+//   its last option still takes a typed id. Load household adds everyone's in
+//   one tap - adding rows only, never changing or removing one already there.
+//   See PhoneDirectory.cs and the integration's GET /api/home_organizer/phones.
 // dotnet publish -f net10.0-android -c Release -p:AndroidPackageFormat=apk
 
 using System;
@@ -1213,7 +1220,12 @@ namespace HO_Mind_AI
         private Task ShowAlertAsync(string title, string message, string cancel) => Microsoft.Maui.ApplicationModel.MainThread.InvokeOnMainThreadAsync(() => this.DisplayAlertAsync(title, message, cancel));
         private void TestSTT_Clicked(object sender, EventArgs e) { string toSpeak = "Testing STT removed from this mode."; if (TestInput != null) TestInput.Text = toSpeak; }
         private async void TestTTS_Clicked(object sender, EventArgs e) { string toSpeak = "Testing voice audio output."; if (TestInput != null && !string.IsNullOrWhiteSpace(TestInput.Text) && TestInput.Text != "Listening...") toSpeak = TestInput.Text; await SpeakTextAsync(toSpeak); }
-        private void OpenSettings_Clicked(object? sender, EventArgs e) { if (SettingsModal != null) SettingsModal.IsVisible = true; }
+        private void OpenSettings_Clicked(object? sender, EventArgs e)
+        {
+            if (SettingsModal != null) SettingsModal.IsVisible = true;
+            // [ADDED v2026.10.21] Name the saved devices in their dropdowns.
+            _ = NamePhoneFieldsAsync();
+        }
         private void Close_Clicked(object? sender, EventArgs e) => Microsoft.Maui.Controls.Application.Current?.Quit();
 
         private void LoadSettings()
@@ -1227,6 +1239,10 @@ namespace HO_Mind_AI
             if (AgentIdEntry != null) AgentIdEntry.Text = Preferences.Get("ha_agent_id", "conversation.ho_ai_agent");
             if (NotifyIdEntry != null) NotifyIdEntry.Text = UserRoster.PrimaryDeviceId();
             if (PrimaryNameEntry != null) PrimaryNameEntry.Text = UserRoster.PrimaryName();
+            // [ADDED v2026.10.21] The main phone's dropdown, and every person's
+            // in RenderUsersList; the refreshers start over with the screen.
+            _phoneFieldRefreshers.Clear();
+            if (PrimaryPhoneSlot != null && NotifyIdEntry != null) PrimaryPhoneSlot.Content = PhoneField(NotifyIdEntry, PrimaryNameEntry);
             RenderUsersList();
             if (UseBtMicSwitch != null) UseBtMicSwitch.IsToggled = Preferences.Get("use_bt_mic", false);
             if (UseShakeMicSwitch != null) UseShakeMicSwitch.IsToggled = Preferences.Get("use_shake_mic", false);
@@ -1263,16 +1279,13 @@ namespace HO_Mind_AI
                 TextColor = Microsoft.Maui.Graphics.Colors.White,
                 BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#111"),
             };
-            var id = new Entry
-            {
-                Placeholder = "Device ID (32 hex)",
-                Text = user.DeviceId,
-                TextColor = Microsoft.Maui.Graphics.Colors.White,
-                BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#111"),
-            };
+            // [MODIFIED v2026.10.21] The id is chosen from a dropdown of the
+            // devices Home Assistant knows. The 32 characters live in this hidden
+            // field, which ReadUserRows and Save read exactly as before.
+            var id = new Entry { Text = user.DeviceId, IsVisible = false };
             var remove = new Button
             {
-                Text = "\u2715",
+                Text = "✕",
                 BackgroundColor = Microsoft.Maui.Graphics.Colors.Transparent,
                 TextColor = Microsoft.Maui.Graphics.Colors.White,
                 WidthRequest = 40,
@@ -1290,14 +1303,184 @@ namespace HO_Mind_AI
                     new ColumnDefinition { Width = GridLength.Auto },
                 },
             };
+            // Order matters: ReadUserRows takes the row's FIRST Entry as the name
+            // and the SECOND as the id.
             row.Add(name, 0);
-            row.Add(id, 1);
+            row.Add(PhoneField(id, name), 1);
             row.Add(remove, 2);
+            row.Add(id, 1);
 
             // Removed from the screen only. Nothing is stored until Save, so a
             // row taken out by mistake comes back by closing Settings.
             remove.Clicked += (s, e) => UsersList?.Children.Remove(row);
             return row;
+        }
+
+        // [ADDED v2026.10.21] The devices Home Assistant knows, as last read, and
+        // the dropdowns showing them - so a dropdown can name the device whose id
+        // it holds instead of showing 32 characters.
+        private List<HaPhone> _knownPhones = new();
+        private readonly List<Action> _phoneFieldRefreshers = new();
+        private const string TypeIdByHand = "Type the ID by hand…";
+
+        private string PhoneFieldText(string? deviceId)
+        {
+            string id = (deviceId ?? "").Trim();
+            if (id.Length == 0) return "Choose phone";
+            var known = _knownPhones.FirstOrDefault(p => string.Equals(p.DeviceId, id, StringComparison.OrdinalIgnoreCase));
+            if (known != null) return known.Label;
+            return $"Saved device …{id[Math.Max(0, id.Length - 4)..]}";
+        }
+
+        private void RefreshPhoneFields()
+        {
+            foreach (var refresh in _phoneFieldRefreshers) refresh();
+        }
+
+        // [ADDED v2026.10.21] A dropdown in place of the device id field. Tapped,
+        // it reads the devices from Home Assistant with the address and token as
+        // they stand on this screen (Save may not have been pressed yet) and opens
+        // them as a list; the one chosen is shown by name and its id kept in the
+        // hidden field beside it. An empty name is filled with the device's owner.
+        private View PhoneField(Entry id, Entry? name)
+        {
+            var text = new Label
+            {
+                TextColor = Microsoft.Maui.Graphics.Colors.White,
+                VerticalOptions = LayoutOptions.Center,
+                LineBreakMode = LineBreakMode.TailTruncation,
+                FontSize = 14,
+            };
+            var arrow = new Label
+            {
+                Text = "▾",
+                TextColor = Microsoft.Maui.Graphics.Color.FromArgb("#AAA"),
+                VerticalOptions = LayoutOptions.Center,
+                FontSize = 16,
+            };
+            var inner = new Grid
+            {
+                Padding = new Thickness(10, 0),
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = GridLength.Star },
+                    new ColumnDefinition { Width = GridLength.Auto },
+                },
+            };
+            inner.Add(text, 0);
+            inner.Add(arrow, 1);
+            var box = new Border
+            {
+                Content = inner,
+                BackgroundColor = Microsoft.Maui.Graphics.Color.FromArgb("#111"),
+                StrokeThickness = 0,
+                MinimumHeightRequest = 44,
+            };
+
+            void Refresh() => text.Text = PhoneFieldText(id.Text);
+            id.TextChanged += (s, e) => Refresh();
+            _phoneFieldRefreshers.Add(Refresh);
+            Refresh();
+
+            var tap = new TapGestureRecognizer();
+            tap.Tapped += async (s, e) =>
+            {
+                var chosen = await ChoosePhoneAsync(name?.Text);
+                if (chosen == null) return;
+                id.Text = chosen.DeviceId;
+                if (name != null && string.IsNullOrWhiteSpace(name.Text) && chosen.PersonName.Length > 0)
+                    name.Text = chosen.PersonName;
+            };
+            box.GestureRecognizers.Add(tap);
+            return box;
+        }
+
+        // The list the dropdown opens. Two devices with the same label get the end
+        // of their id added, so the line chosen maps back to exactly one device.
+        // The last line always lets the id be typed by hand: an older Home
+        // Organizer has no list to give, and then the reason is the list's title.
+        private async Task<HaPhone?> ChoosePhoneAsync(string? forName)
+        {
+            var (phones, error) = await PhoneDirectory.FetchAsync(ServerUrlEntry?.Text, TokenEntry?.Text);
+            if (phones != null)
+            {
+                _knownPhones = phones;
+                RefreshPhoneFields();
+            }
+            var list = phones ?? new List<HaPhone>();
+            var dupes = list.GroupBy(p => p.Label).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+            var lines = list.Select(p => dupes.Contains(p.Label)
+                ? $"{p.Label} [{p.DeviceId[Math.Max(0, p.DeviceId.Length - 4)..]}]"
+                : p.Label).ToList();
+            lines.Add(TypeIdByHand);
+
+            string title = error ?? (string.IsNullOrWhiteSpace(forName) ? "Choose a device" : $"Device for {forName.Trim()}");
+            string? chosen = await Microsoft.Maui.ApplicationModel.MainThread.InvokeOnMainThreadAsync(
+                () => DisplayActionSheetAsync(title, "Cancel", null, lines.ToArray()));
+            if (chosen == TypeIdByHand)
+            {
+                string? typed = await Microsoft.Maui.ApplicationModel.MainThread.InvokeOnMainThreadAsync(
+                    () => DisplayPromptAsync("Device ID",
+                        "In Home Assistant: Settings > Devices > the device. Copy the long code at the end of the page address.",
+                        "OK", "Cancel", maxLength: 64));
+                typed = typed?.Trim();
+                return string.IsNullOrEmpty(typed) ? null : new HaPhone { DeviceId = typed };
+            }
+            int i = chosen == null ? -1 : lines.IndexOf(chosen);
+            return i >= 0 && i < list.Count ? list[i] : null;
+        }
+
+        // [ADDED v2026.10.21] When Settings opens, the saved devices are named
+        // quietly in the background - nothing is shown if Home Assistant cannot
+        // be reached, the dropdowns simply keep their short form.
+        private async Task NamePhoneFieldsAsync()
+        {
+            var (phones, _) = await PhoneDirectory.FetchAsync(ServerUrlEntry?.Text, TokenEntry?.Text);
+            if (phones == null) return;
+            _knownPhones = phones;
+            Microsoft.Maui.ApplicationModel.MainThread.BeginInvokeOnMainThread(RefreshPhoneFields);
+        }
+
+        // [ADDED v2026.10.21] Everyone's phone in one tap. ADDS rows only: a row
+        // already on screen, or the main phone, is never changed or removed, so
+        // running it twice, or after adding someone by hand, does no harm.
+        private async void LoadHousehold_Clicked(object? sender, EventArgs e)
+        {
+            var (phones, error) = await PhoneDirectory.FetchAsync(ServerUrlEntry?.Text, TokenEntry?.Text);
+            if (phones == null)
+            {
+                await ShowAlertAsync("Household", error ?? "No devices found.", "OK");
+                return;
+            }
+            _knownPhones = phones;
+
+            string primaryNote = "";
+            var mine = phones.Where(p => p.IsMe && p.CanNotify).ToList();
+            if (NotifyIdEntry != null && string.IsNullOrWhiteSpace(NotifyIdEntry.Text) && mine.Count == 1)
+            {
+                NotifyIdEntry.Text = mine[0].DeviceId;
+                if (PrimaryNameEntry != null && string.IsNullOrWhiteSpace(PrimaryNameEntry.Text)) PrimaryNameEntry.Text = mine[0].PersonName;
+                primaryNote = "Your phone was filled in. ";
+            }
+
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(NotifyIdEntry?.Text)) known.Add(NotifyIdEntry!.Text.Trim());
+            foreach (var u in ReadUserRows())
+                if (!string.IsNullOrWhiteSpace(u.DeviceId)) known.Add(u.DeviceId.Trim());
+
+            int added = 0;
+            foreach (var p in phones.Where(p => !p.IsMe && p.CanNotify))
+            {
+                if (!known.Add(p.DeviceId)) continue;
+                UsersList?.Children.Add(BuildUserRow(new HoUser { Name = p.PersonName, DeviceId = p.DeviceId }));
+                added++;
+            }
+            RefreshPhoneFields();
+
+            string message = added > 0
+                ? $"{primaryNote}Added {added} {(added == 1 ? "person" : "people")}. Change each name to the way you say it - you can add more names separated by commas. Then press Save."
+                : $"{primaryNote}Everyone with a phone is already on the list.";
+            await ShowAlertAsync("Household", message, "OK");
         }
 
         private void AddUser_Clicked(object? sender, EventArgs e)

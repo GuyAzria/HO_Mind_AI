@@ -156,14 +156,25 @@
                             <Label Text="People and phones:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
                             <Label Text="A reminder goes to the first phone unless a name below is spoken. Separate a person&apos;s names with commas." TextColor="#666" FontSize="10" />
                             
+                            <!-- [MODIFIED v2026.10.21 | 2026-10-21] The device id is chosen from a
+                                 dropdown of the devices Home Assistant knows (and Load household
+                                 fills the whole house) instead of being copied out of a desktop
+                                 browser. The dropdown is built in code - PhoneField - and placed in
+                                 PrimaryPhoneSlot; the id itself stays in NotifyIdEntry, hidden, so
+                                 Save reads it exactly as before. Its last option lets the id be
+                                 typed by hand for a Home Organizer older than v2026.10.21. -->
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                                 <Entry x:Name="PrimaryNameEntry" Grid.Column="0" Placeholder="Name, alias (you)" TextColor="White" BackgroundColor="#111" />
-                                <Entry x:Name="NotifyIdEntry" Grid.Column="1" Placeholder="Device ID (32 hex)" TextColor="White" BackgroundColor="#111" />
+                                <ContentView x:Name="PrimaryPhoneSlot" Grid.Column="1" />
+                                <Entry x:Name="NotifyIdEntry" Grid.Column="1" IsVisible="False" />
                             </Grid>
-                            
+
                             <VerticalStackLayout x:Name="UsersList" Spacing="8" />
-                            
-                            <Button Text="➕ Add person" Clicked="AddUser_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" CornerRadius="8" HorizontalOptions="Start" Padding="14,0" />
+
+                            <HorizontalStackLayout Spacing="8">
+                                <Button Text="➕ Add person" Clicked="AddUser_Clicked" BackgroundColor="#333" TextColor="White" HeightRequest="40" CornerRadius="8" Padding="14,0" />
+                                <Button Text="👪 Load household" Clicked="LoadHousehold_Clicked" BackgroundColor="#128C7E" TextColor="White" HeightRequest="40" CornerRadius="8" Padding="14,0" />
+                            </HorizontalStackLayout>
 
                             <Label Text="Microphone Source:" TextColor="#AAA" FontSize="12" Margin="0,5,0,-10" />
                             <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
