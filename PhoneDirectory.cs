@@ -1,4 +1,8 @@
-﻿// [ADDED v2026.10.21 | 2026-10-21] Purpose: The household's phones, read from
+﻿// [MODIFIED v2026.10.22 | 2026-10-22] Purpose: a bare IP address threw an
+// unhandled InvalidOperationException out of the dropdown's tap handler; the
+// address is now normalised and checked first, and every failure returns a
+// message instead of an exception.
+// [ADDED v2026.10.21 | 2026-10-21] Purpose: The household's phones, read from
 // Home Assistant, so a phone's device id is picked from a list instead of
 // being copied by hand out of a desktop browser's address bar.
 
@@ -77,11 +81,13 @@ namespace HO_Mind_AI
         /// </summary>
         public static async Task<(List<HaPhone>? Phones, string? Error)> FetchAsync(string? url, string? token)
         {
-            string baseUrl = (url ?? "").Trim().TrimEnd('/');
+            string baseUrl = HaCredentials.NormalizeUrl(url);
             if (baseUrl.Length == 0) baseUrl = HaCredentials.GetUrl();
             string bearer = (token ?? "").Trim();
             if (bearer.Length == 0) bearer = await HaCredentials.GetTokenAsync();
             if (baseUrl.Length == 0) return (null, "Enter the Home Assistant address first.");
+            if (!HaCredentials.IsUsableUrl(baseUrl))
+                return (null, "The address must look like http://192.168.1.100:8123");
             if (bearer.Length == 0) return (null, "Enter the access token first.");
 
             try
@@ -113,6 +119,13 @@ namespace HO_Mind_AI
             catch (JsonException)
             {
                 return (null, "Home Assistant sent an answer this app cannot read.");
+            }
+            catch (Exception ex)
+            {
+                // [ADDED v2026.10.22] Anything else is reported, never thrown: this
+                // runs from a tap handler, where an exception closes the screen or
+                // the app instead of saying what went wrong.
+                return (null, $"Could not read the devices: {ex.Message}");
             }
         }
     }

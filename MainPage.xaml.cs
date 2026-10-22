@@ -1525,6 +1525,12 @@ namespace HO_Mind_AI
         private async void SaveSettings_Clicked(object? sender, EventArgs e)
         {
             HaCredentials.SetUrl(ServerUrlEntry?.Text);
+            // [ADDED v2026.10.22] Show the address as it was stored - "http://"
+            // added to a bare IP - and say so when it still cannot be used.
+            if (ServerUrlEntry != null) ServerUrlEntry.Text = HaCredentials.GetUrl();
+            string savedUrl = HaCredentials.GetUrl();
+            if (savedUrl.Length > 0 && !HaCredentials.IsUsableUrl(savedUrl))
+                await ShowAlertAsync("Settings", "The Home Assistant address must look like http://192.168.1.100:8123", "OK");
             // [MODIFIED v2026.9.24] The token goes to the device secure store.
             // When that store refuses it there is deliberately no fallback to
             // writing plain text - the failure is reported below instead.

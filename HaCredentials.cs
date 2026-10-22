@@ -1,4 +1,7 @@
-﻿// [ADDED v2026.9.24 | 2026-09-24] Purpose: One owner for the Home Assistant
+﻿// [MODIFIED v2026.10.22 | 2026-10-22] Purpose: the address is normalised on the
+// way in and out - "http://" added when no scheme was typed - so a bare IP no
+// longer fails every request with "An invalid request URI was provided".
+// [ADDED v2026.9.24 | 2026-09-24] Purpose: One owner for the Home Assistant
 // address, the long-lived token and the HttpClient that carries them. Created
 // because the token was read and the client was built in two separate places,
 // so a change to one never reached the other.
@@ -36,10 +39,36 @@ namespace HO_Mind_AI
         private const string TokenKey = "ha_token";
         private const string UrlKey = "ha_url";
 
-        /// <summary>The configured base address, with any trailing slash removed.</summary>
-        public static string GetUrl() => (Preferences.Get(UrlKey, "") ?? "").Trim().TrimEnd('/');
+        /// <summary>The configured base address, normalised - see NormalizeUrl.</summary>
+        public static string GetUrl() => NormalizeUrl(Preferences.Get(UrlKey, ""));
 
-        public static void SetUrl(string? url) => Preferences.Set(UrlKey, (url ?? "").Trim());
+        public static void SetUrl(string? url) => Preferences.Set(UrlKey, NormalizeUrl(url));
+
+        /// <summary>
+        /// [ADDED v2026.10.22] The address as typed, made usable: trimmed, no
+        /// trailing slash, and "http://" put in front when no scheme was typed
+        /// ("192.168.1.100:8123"), or its colon restored ("http//..."). Without a
+        /// scheme HttpClient refuses the address before sending anything, and the
+        /// user saw only "HA API Error: An invalid request URI was provided"
+        /// although the IP, the token and the VPN were all right. http is the
+        /// default because that is how this app reaches Home Assistant; an https
+        /// address is kept exactly as typed.
+        /// </summary>
+        public static string NormalizeUrl(string? url)
+        {
+            string u = (url ?? "").Trim().TrimEnd('/');
+            if (u.Length == 0) return "";
+            if (u.StartsWith("http//", StringComparison.OrdinalIgnoreCase)) u = "http://" + u[6..];
+            else if (u.StartsWith("https//", StringComparison.OrdinalIgnoreCase)) u = "https://" + u[7..];
+            else if (!u.Contains("://")) u = "http://" + u;
+            return u.TrimEnd('/');
+        }
+
+        /// <summary>True when the address is an absolute http or https URL with a host.</summary>
+        public static bool IsUsableUrl(string? url) =>
+            Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            && uri.Host.Length > 0;
 
         /// <summary>
         /// The token, from secure storage. An install that still holds the old
